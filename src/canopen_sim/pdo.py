@@ -105,7 +105,7 @@ class PdoEngine:
             if self.od.get(t.comm, 2) in _EVENT_TYPES:
                 out += self._send(t, now)
         for r in self.rpdos:
-            r.last_rx, r.deadline_hit, r.held = now, False, None
+            r.last_rx, r.deadline_hit, r.held = None, False, None  # armed by the first frame
         return out
 
     def on_sync(self, now: float) -> list[Frame]:
@@ -144,7 +144,7 @@ class PdoEngine:
                 out += self._send(t, now)
         for r in self.rpdos:
             timer = self.od.get(r.comm, 5) / 1000.0
-            if (timer > 0 and r.last_rx is not None and not r.deadline_hit
+            if (timer > 0 and self._cob(r.comm) is not None and r.last_rx is not None and not r.deadline_hit
                     and now >= r.last_rx + timer - 1e-9):
                 r.deadline_hit = True
                 out += self.node.emergency(EMCY_RPDO_TIMEOUT, REG_COMMUNICATION, now=now)

@@ -285,3 +285,20 @@ def test_pdo_emcy_honours_inhibit():
     assert node.poll(1.2) == []  # deadline EMCY 0x8250 held back by inhibit
     assert node.poll(1.4) == []
     assert [f.data[:2] for f in node.poll(1.5)] == [b"\x50\x82"]
+
+
+def test_disabled_rpdo_with_timer_raises_no_deadline_emcy():
+    od, node = make(rpdos=[PdoSpec(0, [(0x2001, 0, 8)], event_timer_ms=100, enabled=False)])
+    start(node, 0.0)
+    assert node.poll(0.5) == []
+    assert node.poll(5.0) == []
+    assert node.emcy.active() == []
+
+
+def test_rpdo_deadline_arms_on_first_frame_not_at_start():
+    od, node = make(rpdos=[PdoSpec(0, [(0x2001, 0, 8)], event_timer_ms=100)])
+    start(node, 0.0)
+    assert node.poll(5.0) == []  # nothing received yet: not monitored
+    node.handle(Frame(RPDO1, b"\x01"), 5.0)
+    assert node.poll(5.05) == []
+    assert [f.data[:2] for f in node.poll(5.1)] == [b"\x50\x82"]
