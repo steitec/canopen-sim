@@ -241,3 +241,36 @@ def test_reset_node_restores_mapping():
     w(od, 0x1800, 1, TPDO1)
     node.handle(Frame(frames.NMT, bytes([0x81, ID])), 1.0)
     assert od.get(0x1A00, 1) == 0x20000010 and od.get(0x1A00, 0) == 1
+
+
+def test_mapping_zero_bits_rejected():
+    od, _ = make([tp()])
+    try:
+        _remap(od, [0x20000000])
+    except SdoAbort as e:
+        assert e.code == PDO_LENGTH
+    else:
+        raise AssertionError
+
+
+def test_mapping_bits_larger_than_object_rejected():
+    od, _ = make([tp()])
+    for entry in (0x20010010, 0x20000020, 0x20020009):
+        try:
+            _remap(od, [entry])
+        except SdoAbort as e:
+            assert e.code == PDO_LENGTH
+        else:
+            raise AssertionError(hex(entry))
+    _remap(od, [0x20020001])  # BOOLEAN as 1 bit is fine
+
+
+def test_rpdo_with_bad_mapping_never_raises():
+    od, node = make(rpdos=[PdoSpec(0, [(0x2000, 0, 16)])])
+    od.set(0x1600, 1, 0x20000000)  # zero bits, bypassing validation
+    od.set(0x1600, 0, 1)
+    start(node)
+    node.handle(Frame(RPDO1, b"\x01\x02"), 0.1)
+    od.set(0x1600, 1, 0x20000010)
+    od.set(0x1600, 1, 0x20010020)  # wider than object
+    node.handle(Frame(RPDO1, b"\x01\x02\x03\x04"), 0.2)

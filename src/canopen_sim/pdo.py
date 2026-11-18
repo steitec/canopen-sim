@@ -2,6 +2,7 @@
 deadline monitoring. Pure logic with an explicit ``now`` (seconds)."""
 from __future__ import annotations
 
+import struct
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -176,8 +177,8 @@ class PdoEngine:
             try:
                 var = self.od.entry(index, sub)
                 self.od.pdo_write(index, sub, _convert(var.dtype, raw, bits))
-            except SdoAbort:
-                continue  # vetoed or out of range: ignored
+            except (SdoAbort, ValueError, TypeError, OverflowError, struct.error):
+                continue  # vetoed, out of range or malformed mapping: ignored
 
 
 def _convert(dtype: DataType, raw: int, bits: int):

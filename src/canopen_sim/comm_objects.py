@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from .frames import emcy, rpdo, sdo_rx, sdo_tx, tpdo
 from .od import (
-    INCOMPATIBLE, NOT_MAPPABLE, PDO_LENGTH, DataType, ObjectDictionary, SdoAbort, Variable,
+    INCOMPATIBLE, NOT_MAPPABLE, PDO_LENGTH, DataType, ObjectDictionary, SdoAbort, Variable, encode,
 )
 
 U8, U16, U32 = DataType.UNSIGNED8, DataType.UNSIGNED16, DataType.UNSIGNED32
@@ -126,7 +126,16 @@ def _add_pdo(od, comm, mapi, cob, spec, is_tx):
             var = od.entry(entry >> 16, (entry >> 8) & 0xFF)
             if not var.pdo_mappable:
                 raise SdoAbort(NOT_MAPPABLE)
-            total += entry & 0xFF
+            bits = entry & 0xFF
+            if var.dtype in (DataType.VISIBLE_STRING, DataType.OCTET_STRING):
+                limit = 64
+                if bits % 8:
+                    raise SdoAbort(PDO_LENGTH)
+            else:
+                limit = 8 * len(encode(var.dtype, 0))
+            if not 1 <= bits <= limit:
+                raise SdoAbort(PDO_LENGTH)
+            total += bits
         if total > 64:
             raise SdoAbort(PDO_LENGTH)
 
