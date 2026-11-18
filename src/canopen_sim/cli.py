@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import os
 import signal
 import sys
 import threading
@@ -34,15 +36,22 @@ _INVALID = 0x80000000
 
 # --- helpers ------------------------------------------------------------------------
 
+class UsageError(ValueError):
+    """A malformed command line value (exit code 2)."""
+
+
 def _coerce(value: str) -> Any:
     low = value.lower()
     if low in ("true", "false"):
         return low == "true"
     for convert in (lambda v: int(v, 0), float):
         try:
-            return convert(value)
+            result = convert(value)
         except ValueError:
             continue
+        if isinstance(result, float) and not math.isfinite(result):
+            raise UsageError(f"value {value!r} is not a finite number")
+        return result
     return value
 
 
@@ -50,7 +59,7 @@ def _params(pairs: list[str]) -> dict[str, Any]:
     params: dict[str, Any] = {}
     for pair in pairs:
         if "=" not in pair:
-            raise SystemExit(f"{PROG}: parameter {pair!r} must be name=value")
+            raise UsageError(f"parameter {pair!r} must be name=value")
         name, value = pair.split("=", 1)
         params[name] = _coerce(value)
     return params
@@ -188,7 +197,12 @@ def _control_call(args, request: dict) -> dict | int:
 
 
 def _cmd_inject(args) -> int:
-    answer = _control_call(args, {"inject": args.kind, "params": _params(args.params)})
+    try:
+        params = _params(args.params)
+    except UsageError as error:
+        _error(error)
+        return 2
+    answer = _control_call(args, {"inject": args.kind, "params": params})
     return answer if isinstance(answer, int) else 0
 
 
@@ -273,9 +287,23 @@ def main(argv: list[str] | None = None, stop: threading.Event | None = None) -> 
     """Run the CLI. ``stop`` (tests) ends ``serve`` like SIGINT does."""
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.func is _cmd_serve:
-        return _cmd_serve(args, stop)
-    return args.func(args)
+    try:
+        code = _cmd_serve(args, stop) if args.func is _cmd_serve else args.func(args)
+        sys.stdout.flush()  # surface a closed pipe here, not at interpreter exit
+        return code
+    except BrokenPipeError:  # `canopen-sim map ... | head`: the reader is gone
+        _silence_stdout()
+        return 0
+
+
+def _silence_stdout() -> None:
+    """Point stdout at devnull so the flush at exit does not raise BrokenPipeError again."""
+    try:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        os.close(devnull)
+    except (OSError, ValueError, AttributeError):
+        pass  # not a real file (tests); nothing to flush
 
 
 if __name__ == "__main__":

@@ -116,3 +116,22 @@ def test_serve_prints_nodes_and_stops(capsys):
         stop.set()
         thread.join(5)
     assert result == [0]
+
+
+@pytest.mark.parametrize("params", [["foo"], ["x=nan"], ["x=inf"]])
+def test_malformed_inject_params_exit_2(params, capsys):
+    assert main(["inject", "over_temperature", *params, "--control-port", "1"]) == 2
+    assert capsys.readouterr().err.strip()
+
+
+def test_broken_pipe_is_silent():
+    import subprocess
+    import sys
+    result = subprocess.run(
+        [sys.executable, "-m", "canopen_sim", "map", "generic-drive"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    assert result.returncode == 0
+    shell = subprocess.run(
+        f"{sys.executable} -m canopen_sim map generic-drive | head -1 >/dev/null",
+        shell=True, stderr=subprocess.PIPE)
+    assert shell.stderr == b""
