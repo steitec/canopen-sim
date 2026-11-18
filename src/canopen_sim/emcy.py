@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from . import frames
 from .frames import Frame
-from .od import RANGE, SdoAbort
+from .od import NO_DATA, RANGE, SdoAbort
 
 if TYPE_CHECKING:
     from .node import Node
@@ -31,6 +31,8 @@ class Emcy:
         self._queue: list[Frame] = []
         self._last_sent: float | None = None
         node.od.on_write(0x1003, 0, self._on_history_write)
+        for sub in range(1, HISTORY_SIZE + 1):
+            node.od.on_read(0x1003, sub, lambda sub=sub: self._on_history_read(sub))
 
     # -- public API -------------------------------------------------------
 
@@ -98,6 +100,10 @@ class Emcy:
         for sub in range(1, HISTORY_SIZE + 1):
             od.set(0x1003, sub, entries[sub - 1] if sub <= len(entries) else 0)
         od.set(0x1003, 0, len(entries))
+
+    def _on_history_read(self, sub: int) -> None:
+        if sub > self.node.od.get(0x1003, 0):
+            raise SdoAbort(NO_DATA)
 
     def _on_history_write(self, value: int) -> None:
         if value != 0:

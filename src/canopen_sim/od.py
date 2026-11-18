@@ -30,6 +30,7 @@ TOO_LOW = 0x06090032
 GENERAL = 0x08000000
 CANNOT_STORE = 0x08000020
 DEVICE_STATE = 0x08000022
+NO_DATA = 0x08000024
 
 
 class SdoAbort(Exception):
@@ -109,6 +110,7 @@ class ObjectDictionary:
         self._indexes: set[int] = set()
         self._hooks: dict[tuple[int, int], list[Callable[[Any], None]]] = {}
         self._listeners: list[Callable[[int, int], None]] = []
+        self._read_hooks: dict[tuple[int, int], list[Callable[[], None]]] = {}
 
     def add(self, var: Variable) -> None:
         self._vars[(var.index, var.sub)] = var
@@ -149,10 +151,18 @@ class ObjectDictionary:
         self.entry(index, sub)
         self._hooks.setdefault((index, sub), []).append(fn)
 
+    def on_read(self, index: int, sub: int, fn: Callable[[], None]) -> None:
+        """Register a callback run before an SDO read; it may raise SdoAbort
+        to refuse the read."""
+        self.entry(index, sub)
+        self._read_hooks.setdefault((index, sub), []).append(fn)
+
     def sdo_read(self, index: int, sub: int) -> bytes:
         var = self.entry(index, sub)
         if var.access == "wo":
             raise SdoAbort(WRITE_ONLY)
+        for fn in self._read_hooks.get((index, sub), ()):
+            fn()
         return encode(var.dtype, var.value)
 
     def sdo_write(self, index: int, sub: int, data: bytes) -> None:

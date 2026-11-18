@@ -6,7 +6,7 @@ from canopen_sim import frames
 from canopen_sim.emcy import COMMUNICATION, CURRENT, GENERIC, MANUFACTURER, TEMPERATURE, VOLTAGE
 from canopen_sim.frames import Frame
 from canopen_sim.node import NmtState
-from canopen_sim.od import RANGE, SdoAbort
+from canopen_sim.od import NO_DATA, RANGE, SdoAbort
 from .test_node import ID, make, nmt
 
 
@@ -104,3 +104,17 @@ def test_emcy_disabled_by_bit31():
     assert node.emcy.raise_error(0x2310, CURRENT, now=0.0) == []
     assert node.emcy.clear(now=1.0) == []
     assert od.get(0x1003, 1) == 0x2310 and od.get(0x1001, 0) == 0
+
+
+def test_history_entry_beyond_count_is_no_data():
+    od, node = booted()
+    for sub in range(1, 9):
+        with pytest.raises(SdoAbort) as e:
+            od.sdo_read(0x1003, sub)
+        assert e.value.code == NO_DATA == 0x08000024
+    node.emcy.raise_error(0x2310, CURRENT, now=0.0)
+    assert od.sdo_read(0x1003, 1) == struct.pack("<I", 0x2310)
+    with pytest.raises(SdoAbort) as e:
+        od.sdo_read(0x1003, 2)
+    assert e.value.code == NO_DATA
+    assert od.sdo_read(0x1003, 0) == b"\x01"
