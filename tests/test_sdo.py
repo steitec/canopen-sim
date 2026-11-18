@@ -4,9 +4,10 @@ import pytest
 
 from canopen_sim import frames
 from canopen_sim.od import (
-    BAD_COMMAND, TIMEOUT, TOGGLE, DataType, ObjectDictionary, Variable,
+    BAD_COMMAND, LENGTH_MISMATCH, TIMEOUT, TOGGLE, TOO_LONG, DataType,
+    ObjectDictionary, Variable,
 )
-from canopen_sim.sdo import SDO_TIMEOUT, SdoServer
+from canopen_sim.sdo import MAX_VARIABLE_LENGTH, SDO_TIMEOUT, SdoServer
 
 
 def make():
@@ -132,3 +133,130 @@ def test_client_abort_resets_transfer():
     (r,) = s.handle(bytes([0x40, 0x00, 0x10, 0x00, 0, 0, 0, 0]), 0.2)
     assert r[0] == 0x43
     assert s.poll(5.0) == []
+
+
+def dl_init(s, idx, size=None, now=0.0, sub=0):
+    if size is None:
+        return s.handle(bytes([0x20, idx & 0xFF, idx >> 8, sub, 0, 0, 0, 0]), now)
+    return s.handle(bytes([0x21, idx & 0xFF, idx >> 8, sub]) + struct.pack("<I", size), now)
+
+
+def test_download_segment_wrong_toggle_aborts():
+    _, s = make()
+    dl_init(s, 0x2001, 12)
+    (r,) = s.handle(bytes([0x10]) + b"ABCDEFG", 0.1)
+    assert abort_of(r) == TOGGLE and r[1:4] == bytes([0x01, 0x20, 0x00])
+    assert s.state == "idle"
+
+
+def test_expedited_download_with_size_indicator_on_wire():
+    od, s = make()
+    # e=1, s=1, n=2 -> 2 bytes in 4
+    (r,) = s.handle(bytes([0x23 | (2 << 2), 0x00, 0x20, 0x00, 0x34, 0x12, 0xFF, 0xFF]), 0.0)
+    assert r == bytes([0x60, 0x00, 0x20, 0x00, 0, 0, 0, 0])
+    assert od.get(0x2000, 0) == 0x1234
+
+
+def test_expedited_download_without_size_bit():
+    od, s = make()
+    od.add(Variable(0x2002, 0, "u32", DataType.UNSIGNED32, "rw", 0))
+    (r,) = s.handle(bytes([0x22, 0x02, 0x20, 0x00]) + struct.pack("<I", 0xCAFEBABE), 0.0)
+    assert r[0] == 0x60
+    assert od.get(0x2002, 0) == 0xCAFEBABE
+
+
+def test_expedited_upload_short_sets_n_bits():
+    _, s = make()
+    (r,) = s.handle(bytes([0x40, 0x00, 0x20, 0x00, 0, 0, 0, 0]), 0.0)
+    # u16: e=1, s=1, n=2
+    assert r[0] == 0x40 | (2 << 2) | 0x03
+    assert r[4:6] == b"\x00\x00"
+
+
+def test_short_and_empty_frames():
+    _, s = make()
+    assert s.handle(b"", 0.0) == []
+    (r,) = s.handle(bytes([0x40, 0x00, 0x10, 0x00]), 0.0)
+    assert r[0] == 0x43
+    assert len(r) == 8
+
+
+def test_download_size_mismatch_too_short():
+    od, s = make()
+    dl_init(s, 0x2001, 12)
+    s.handle(bytes([0x00]) + b"ABCDEFG", 0.1)
+    (r,) = s.handle(bytes([0x10 | (4 << 1) | 1]) + b"HIJ" + bytes(4), 0.2)
+    assert abort_of(r) == LENGTH_MISMATCH
+    assert od.get(0x2001, 0) == ""
+    assert s.state == "idle"
+
+
+def test_download_surplus_data_aborts_too_long():
+    od, s = make()
+    dl_init(s, 0x2001, 8)
+    s.handle(bytes([0x00]) + b"ABCDEFG", 0.1)
+    (r,) = s.handle(bytes([0x10 | (4 << 1) | 1]) + b"HIJ" + bytes(4), 0.2)
+    assert abort_of(r) == TOO_LONG
+    assert od.get(0x2001, 0) == ""
+    assert s.state == "idle"
+
+
+def test_download_announced_size_above_cap_aborts():
+    od, s = make()
+    (r,) = dl_init(s, 0x2000, 8)  # u16 entry
+    assert abort_of(r) == TOO_LONG
+    (r,) = dl_init(s, 0x2001, MAX_VARIABLE_LENGTH + 1)
+    assert abort_of(r) == TOO_LONG
+
+
+def test_download_without_size_is_bounded_for_fixed_type():
+    od, s = make()
+    dl_init(s, 0x2000)  # u16: cap 2 bytes
+    (r,) = s.handle(bytes([0x00]) + b"ABCDEFG", 0.1)
+    assert abort_of(r) == TOO_LONG
+    assert s.state == "idle"
+
+
+def test_download_without_size_is_bounded_for_string():
+    _, s = make()
+    dl_init(s, 0x2001)
+    tog = 0
+    got = None
+    for i in range(MAX_VARIABLE_LENGTH // 7 + 2):
+        (r,) = s.handle(bytes([tog << 4]) + b"A" * 7, 0.0)
+        if r[0] == 0x80:
+            got = r
+            break
+        tog ^= 1
+    assert got is not None and abort_of(got) == TOO_LONG
+    assert s.state == "idle"
+
+
+def test_download_timeout_and_activity_refresh():
+    _, s = make()
+    dl_init(s, 0x2001, 12, now=10.0)
+    s.handle(bytes([0x00]) + b"ABCDEFG", 10.8)
+    assert s.poll(11.5) == []
+    (r,) = s.poll(11.9)
+    assert abort_of(r) == TIMEOUT and r[1:4] == bytes([0x01, 0x20, 0x00])
+    assert s.state == "idle"
+
+
+def test_upload_activity_refresh():
+    _, s = make()
+    s.handle(bytes([0x40, 0x08, 0x10, 0x00, 0, 0, 0, 0]), 0.0)
+    s.handle(bytes([0x60]) + bytes(7), 0.8)
+    assert s.poll(1.5) == []
+    (r,) = s.poll(1.9)
+    assert abort_of(r) == TIMEOUT
+
+
+def test_completed_upload_returns_to_idle():
+    _, s = make()
+    s.handle(bytes([0x40, 0x08, 0x10, 0x00, 0, 0, 0, 0]), 0.0)
+    s.handle(bytes([0x60]) + bytes(7), 0.1)
+    (r,) = s.handle(bytes([0x70]) + bytes(7), 0.2)
+    assert r[0] & 1
+    assert s.state == "idle"
+    (r,) = s.handle(bytes([0x60]) + bytes(7), 0.3)
+    assert abort_of(r) == BAD_COMMAND

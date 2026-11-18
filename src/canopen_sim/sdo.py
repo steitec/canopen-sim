@@ -4,10 +4,12 @@ from __future__ import annotations
 import struct
 
 from .od import (
-    BAD_COMMAND, LENGTH_MISMATCH, TIMEOUT, TOGGLE, ObjectDictionary, SdoAbort,
+    BAD_COMMAND, LENGTH_MISMATCH, TIMEOUT, TOGGLE, TOO_LONG, DataType,
+    ObjectDictionary, SdoAbort, encode,
 )
 
 SDO_TIMEOUT = 1.0
+MAX_VARIABLE_LENGTH = 65536  # cap for segmented download of strings
 
 # transfer states
 IDLE = "idle"
@@ -40,6 +42,7 @@ class SdoServer:
         self.buffer = b""      # upload: data to send; download: data received
         self.pos = 0           # upload: bytes already sent
         self.size: int | None = None  # download: size announced by the client
+        self.limit = 0         # download: maximum accepted length
         self.last_activity = 0.0
 
     # -- public API -------------------------------------------------------
@@ -125,10 +128,19 @@ class SdoServer:
             self.od.sdo_write(self.index, self.sub, data[4:8 - n])
             self.reset()
             return ack
+        var = self.od.entry(self.index, self.sub)
+        if var.dtype in (DataType.VISIBLE_STRING, DataType.OCTET_STRING):
+            limit = MAX_VARIABLE_LENGTH
+        else:
+            limit = len(encode(var.dtype, var.value))
+        size = struct.unpack_from("<I", data, 4)[0] if cmd & 0x01 else None
+        if size is not None and size > limit:
+            raise SdoAbort(TOO_LONG)
         self.state = DOWNLOAD
         self.buffer = b""
         self.toggle = 0
-        self.size = struct.unpack_from("<I", data, 4)[0] if cmd & 0x01 else None
+        self.size = size
+        self.limit = limit
         self.last_activity = now
         return ack
 
@@ -138,13 +150,14 @@ class SdoServer:
             raise SdoAbort(TOGGLE)
         n = (cmd >> 1) & 7
         self.buffer += data[1:8 - n]
+        if len(self.buffer) > (self.size if self.size is not None else self.limit):
+            raise SdoAbort(TOO_LONG)
         frame = bytes([0x20 | (self.toggle << 4)]) + bytes(7)
         if cmd & 0x01:  # last segment: commit
             payload = self.buffer
             if self.size is not None:
                 if len(payload) < self.size:
                     raise SdoAbort(LENGTH_MISMATCH)
-                payload = payload[:self.size]
             self.od.sdo_write(self.index, self.sub, payload)
             self.reset()
         else:
