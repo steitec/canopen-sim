@@ -74,8 +74,13 @@ class Node:
         out: list[Frame] = []
         if self._sdo_active():
             out += [Frame(frames.sdo_tx(self.node_id), d) for d in self.sdo.poll(now)]
-        if self._hb_next is not None and now >= self._hb_next - 1e-9:
-            period = self.od.get(0x1017, 0) / 1000.0
+        period = self.od.get(0x1017, 0) / 1000.0
+        if period <= 0:
+            self._hb_next = None  # 0x1017 disabled (also via od.set)
+        elif self._hb_next is None:
+            if self.state != NmtState.BOOTUP:  # enabled via od.set: start now
+                self._hb_next = now + period
+        elif now >= self._hb_next - 1e-9:
             out.append(Frame(frames.heartbeat(self.node_id), bytes([self.state])))
             self._hb_next += period
             if self._hb_next <= now:  # fell far behind: do not burst

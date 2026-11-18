@@ -178,3 +178,15 @@ def test_sdo_timeout_abort_is_framed():
     node.handle(Frame(frames.sdo_rx(ID), bytes([0x21, 0x08, 0x10, 0, 3, 0, 0, 0])), 0.1)
     out = node.poll(5.0)
     assert len(out) == 1 and out[0].cob_id == 0x585 and out[0].data[0] == 0x80
+
+
+def test_heartbeat_disabled_and_enabled_via_od_set():
+    od, node = make(heartbeat_ms=100)
+    node.boot(0.0)
+    assert node.poll(0.1) == [Frame(0x705, b"\x7f")]
+    od.set(0x1017, 0, 0)
+    assert node.poll(0.2) == []
+    assert node.poll(0.3) == []
+    od.set(0x1017, 0, 100)
+    assert node.poll(1.0) == []
+    assert node.poll(1.1) == [Frame(0x705, b"\x7f")]
