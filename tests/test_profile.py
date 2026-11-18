@@ -182,3 +182,11 @@ def test_io_signals_from_profile():
                 {"ai1": []}):
         with pytest.raises(ProfileError):
             build_node({"profile": "generic-io", "model": {"signals": bad}}, node_id=1)
+
+
+@pytest.mark.parametrize("value", ["false", "no", 0, 1, None])
+def test_pdo_enabled_must_be_a_bool(value):
+    with pytest.raises(ProfileError, match="enabled"):
+        build_node({"profile": "generic-drive",
+                    "tpdos": [{"number": 0, "mapping": ["0x6041:0/16"],
+                               "enabled": value}]}, node_id=1)

@@ -14,7 +14,7 @@ First release.
   Each lists its `sources` and `limits`; custom devices from YAML profiles and benches.
 - Fault injection: node, SDO, PDO and EMCY catalogue plus drive, I/O and encoder faults,
   switchable at runtime over a loopback JSON control channel.
-- CLI (`list`, `map`, `export-eds`, `serve`, `inject`, `clear`, `state`), EDS export and
-  import, pytest plugin with `canopen_bench` fixtures.
+- CLI (`list`, `map`, `export-eds`, `serve`, `inject`, `clear`, `state`), EDS export (checked by
+  importing it with `canopen`), pytest plugin with `canopen_bench` fixtures.
 - Cross-checked against the `canopen` library, including drive commissioning with
   `BaseNode402`; CI on Linux, Windows and macOS plus a `vcan0` job.

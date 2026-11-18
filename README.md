@@ -8,8 +8,8 @@
 [![CI](https://github.com/steitec/canopen-sim/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/steitec/canopen-sim/actions/workflows/ci.yml)
 
 Simulated **CANopen** devices that **behave**: a servo drive that walks through its power
-state machine, ramps to a target velocity and latches an over-temperature fault until
-you reset it; an I/O module whose inputs follow its outputs or a signal you define; a
+state machine, ramps to a target velocity and can be put into a fault by injecting an over-temperature fault, which you clear
+on the control channel and then acknowledge with a fault reset; an I/O module whose inputs follow its outputs or a signal you define; a
 multi-turn encoder that counts. They run on a virtual CAN bus (any platform) or on a real
 SocketCAN interface such as `vcan0` (Linux), and speak NMT with heartbeat, SDO
 (expedited, segmented and block), PDOs (event, timer and SYNC driven, with mapping), SYNC
@@ -236,9 +236,9 @@ plus a `node` key); see `src/canopen_sim/control.py`.
   statusword behaviour come from public manuals of real drives; where they differ from
   the standard, the manuals won.
 - Nodes inside one bench do not receive each other's frames: the bench has one bus handle
-  and no internal loopback. Use a second process (or a real master) to talk to a node.
+  and no internal loopback. Use a separate bus handle (`bench.network()`, another process on socketcan, or a real master) to talk to a node.
 - The drive's following error is a fixed-lag model, and the halt bit (controlword bit 8)
-  is not implemented.
+  is not implemented. Statusword bit 4 (voltage enabled) is not reported.
 - The I/O wire-break fault uses the manufacturer-specific EMCY code 0xFF01; CiA 401
   defines none.
 - EDS export is checked by importing it with the `canopen` Python library, not against

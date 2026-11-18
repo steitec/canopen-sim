@@ -162,7 +162,9 @@ def _pdo_specs(entries: Any, what: str) -> list[PdoSpec]:
                     raise ProfileError(f"{what}: {key} must be 0..{limit}")
                 setattr(spec, key, value)
         if "enabled" in entry:
-            spec.enabled = bool(entry["enabled"])
+            if not isinstance(entry["enabled"], bool):
+                raise ProfileError(f"{what}: enabled must be true or false")
+            spec.enabled = entry["enabled"]
         specs.append(spec)
     return specs
 

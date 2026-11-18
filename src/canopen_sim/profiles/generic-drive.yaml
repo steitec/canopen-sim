@@ -41,5 +41,6 @@ limits:
   - "not certified by CiA; not a conformance-tested device"
   - "no real-time timing: the model is integrated in steps of a few milliseconds"
   - "no load or motor model: following error is a fixed lag (20 ms times the velocity)"
+  - "statusword bit 4 (voltage enabled) is not reported"
   - "no halt bit (controlword bit 8), no cyclic synchronous modes, only homing methods 35 and 37"
   - "temperature and current faults are injected, not computed"
