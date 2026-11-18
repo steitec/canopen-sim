@@ -10,6 +10,7 @@ from enum import IntEnum
 
 from . import frames
 from .comm_objects import set_node_id
+from .emcy import Emcy
 from .frames import Frame
 from .od import CANNOT_STORE, ObjectDictionary, SdoAbort
 from .pdo import PdoEngine
@@ -44,6 +45,7 @@ class Node:
             set_node_id(od, node_id)
         self._defaults = _snapshot(od)
         self.pdo = PdoEngine(self)
+        self.emcy = Emcy(self)
         self._stored: dict[tuple[int, int], object] | None = None
         self._hb_next: float | None = None
         self._hb_restart = False
@@ -77,12 +79,10 @@ class Node:
             return self.pdo.on_rpdo(frame, now)
         return []
 
-    def emergency(self, code: int, register_bits: int, data: bytes = b"") -> list[Frame]:
-        """Build an EMCY frame and update the error register (0x1001)."""
-        register = (register_bits | 0x01) & 0xFF
-        self.od.set(0x1001, 0, register)
-        payload = struct.pack("<HB", code, register) + bytes(data[:5]).ljust(5, b"\0")
-        return [Frame(frames.emcy(self.node_id), payload)]
+    def emergency(self, code: int, register_bits: int, data: bytes = b"",
+                  now: float | None = None) -> list[Frame]:
+        """Raise an EMCY error (see :class:`canopen_sim.emcy.Emcy`)."""
+        return self.emcy.raise_error(code, register_bits, data, now)
 
     def poll(self, now: float) -> list[Frame]:
         out: list[Frame] = []
@@ -99,6 +99,7 @@ class Node:
             self._hb_next += period
             if self._hb_next <= now:  # fell far behind: do not burst
                 self._hb_next = now + period
+        out += self.emcy.poll(now)
         out += self.pdo.poll(now)
         return out
 
@@ -123,9 +124,11 @@ class Node:
             self.state = NmtState.PRE_OPERATIONAL
         elif cmd == NMT_RESET_NODE:
             self._restore(lambda key: True)
+            self.emcy.reset()
             return self.boot(now)
         elif cmd == NMT_RESET_COMM:
             self._restore(lambda key: 0x1000 <= key[0] <= 0x1FFF)
+            self.emcy.reset()
             return self.boot(now)
         return []
 

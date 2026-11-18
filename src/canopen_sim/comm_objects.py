@@ -50,6 +50,7 @@ def add_communication_objects(
     add(0x1011, 0, "Restore defaults: highest sub-index", U8, "const", 1)
     add(0x1011, 1, "Restore all default parameters", U32, "rw", 1, CommandVariable)
     add(0x1014, 0, "COB-ID EMCY", U32, "rw", 0x80)
+    add(0x1015, 0, "Inhibit time EMCY", U16, "rw", 0)
     add(0x1017, 0, "Producer heartbeat time", U16, "rw", heartbeat_ms)
     add(0x1018, 0, "Identity: highest sub-index", U8, "const", 4)
     add(0x1018, 1, "Vendor ID", U32, "ro", vendor_id)
