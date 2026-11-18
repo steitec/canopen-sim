@@ -204,7 +204,8 @@ def test_tick_dt_is_capped_after_a_stall(benches, channel):
         threading.Event().wait(0.3)
     wait_until(lambda: len(dts) >= stalled_at + 3)
     assert max(dts) == bench_mod.MAX_DT
-    assert all(0 < dt <= bench_mod.MAX_DT for dt in dts)
+    # Windows clocks tick in ~15 ms steps, so two ticks may see dt == 0.
+    assert all(0 <= dt <= bench_mod.MAX_DT for dt in dts)
 
 
 def test_bus_sends_are_serialized(benches, channel):
