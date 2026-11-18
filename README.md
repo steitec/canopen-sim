@@ -201,7 +201,7 @@ Each profile names what it follows in `sources` and states what it does not do i
   parameters, resolution, preset, position and speed plus the C1 objects 0x6500 (operating
   status, mirrors the code-sequence bit), 0x6501 (single-turn resolution) and 0x6502
   (distinguishable revolutions: 65536 for multi-turn, 1 for single-turn, a fixed simulator
-  value while the position counter wraps at 2^32). No alarms or warnings objects, no total
+  value; the position wraps at resolution times 65536, capped at 2^32). No alarms or warnings objects, no total
   measuring range (0x6002), no cyclic timer (0x6200), no cams or diagnostics; no
   acceleration, jitter or quantisation noise. The speed value 0x6030:1 is in steps per
   second (the configured rpm times the resolution divided by 60) and is clamped to

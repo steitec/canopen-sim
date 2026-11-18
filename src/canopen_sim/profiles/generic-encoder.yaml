@@ -36,4 +36,4 @@ limits:
   - "position is integrated from a set speed; no acceleration, jitter or quantisation noise"
   - "modelled as CiA 406 class C1: no alarms or warnings objects, no total measuring range (0x6002), no cyclic timer (0x6200), no cams or diagnostics"
   - "speed value (0x6030:1) is in steps per second, clamped to INTEGER16 (-32768..32767)"
-  - "0x6502 reports 65536 distinguishable revolutions for multi-turn (1 for single-turn); the position counter itself wraps at 2^32"
+  - "0x6502 reports 65536 distinguishable revolutions for multi-turn (1 for single-turn); the position wraps at resolution times 65536 (capped at 2^32)"

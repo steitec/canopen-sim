@@ -11,7 +11,7 @@ from .base import Model
 SINGLE_TURN_FAILURE = 0x5050
 MULTI_TURN_FAILURE = 0x5051
 _WRAP32 = 1 << 32
-MULTITURN_REVOLUTIONS = 65536  # reported in 0x6502; the counter itself wraps at 2**32
+MULTITURN_REVOLUTIONS = 65536  # 0x6502 for multi-turn; position wraps at resolution x this
 
 
 class EncoderModel(Model):
@@ -53,7 +53,9 @@ class EncoderModel(Model):
     # -- helpers ----------------------------------------------------------
 
     def _span(self) -> int:
-        return _WRAP32 if self.multiturn else self._res()
+        if self.multiturn:  # capped to what UNSIGNED32 can hold
+            return min(self._res() * MULTITURN_REVOLUTIONS, _WRAP32)
+        return self._res()
 
     def _res(self) -> int:
         assert self.od is not None, "model not bound"

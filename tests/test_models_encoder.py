@@ -63,10 +63,12 @@ def test_encoder_direction_bit():
     assert od.get(0x6030, 1) == -1000
 
 
-def test_encoder_multiturn_wraps_at_2_32():
+def test_encoder_multiturn_wraps_at_resolution_times_revolutions():
     m = EncoderModel(resolution=4096)
     od, _ = build(m)
-    od.sdo_write(0x6003, 0, struct.pack("<I", 2**32 - 10))
+    span = 4096 * od.get(0x6502, 0)  # 4096 steps x 65536 revolutions
+    od.sdo_write(0x6003, 0, struct.pack("<I", span - 10))
+    assert od.get(0x6004, 0) == span - 10
     m.inject("position_jump", delta=20)
     assert od.get(0x6004, 0) == 10
 
@@ -98,7 +100,7 @@ def test_encoder_position_jump():
     m = EncoderModel(resolution=1000, speed_rpm=0.0)
     od, node = build(m)
     assert m.inject("position_jump", delta=-5) == []
-    assert od.get(0x6004, 0) == 2**32 - 5
+    assert od.get(0x6004, 0) == 1000 * 65536 - 5
     assert node.emcy.active() == []
 
 
