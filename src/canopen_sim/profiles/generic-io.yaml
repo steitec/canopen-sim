@@ -1,0 +1,42 @@
+name: generic-io
+description: >
+  Generic digital/analog I/O module (CiA 401 style): 8 digital inputs, 8 digital
+  outputs, 2 analog inputs, 2 analog outputs. Outputs loop back to the inputs
+  unless a signal or a fault drives them.
+identity:
+  device_type: 0x000F0191   # profile 401, digital + analog in/out (check in Task 15)
+  vendor_id: 0x00000000     # simulator default (check in Task 15)
+  product_code: 0x00000401
+  revision: 0x00010000
+  serial: 0x00000001
+  device_name: SIM-IO-8DI8DO
+heartbeat_ms: 1000
+model:
+  type: io
+  digital_inputs: 8
+  digital_outputs: 8
+  analog_inputs: 2
+  analog_outputs: 2
+  loopback: true
+# PDO numbers are 0-based: number 0 = TPDO1 / RPDO1.
+tpdos:
+  - number: 0               # TPDO1: digital inputs, on change
+    mapping: ["0x6000:1/8"]
+    transmission_type: 255
+  - number: 1               # TPDO2: analog inputs, on change, at most every 10 ms
+    mapping: ["0x6401:1/16", "0x6401:2/16"]
+    transmission_type: 255
+    inhibit_100us: 100
+rpdos:
+  - number: 0               # RPDO1: digital outputs
+    mapping: ["0x6200:1/8"]
+  - number: 1               # RPDO2: analog outputs
+    mapping: ["0x6411:1/16", "0x6411:2/16"]
+sources:
+  - "CiA 401-1 v3.1.0 (PAS)"
+  - "CiA 401-2 v3.1.0 (PAS)"
+limits:
+  - "not certified by CiA; not a conformance-tested device"
+  - "no real-time timing: frames are produced by Python threads every few milliseconds"
+  - "only 8-bit digital and 16-bit analog objects; no polarity, filter or interrupt-mask objects"
+  - "the wire-break EMCY code 0xFF01 is manufacturer-specific (CiA 401 defines none)"

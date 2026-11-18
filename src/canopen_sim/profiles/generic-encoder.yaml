@@ -1,0 +1,36 @@
+name: generic-encoder
+description: >
+  Generic multi-turn rotary encoder (CiA 406 style), 4096 steps per revolution.
+  The position is integrated from a configurable speed; preset and counting
+  direction are supported.
+identity:
+  device_type: 0x00020196   # profile 406, multi-turn absolute rotary encoder (check in Task 15)
+  vendor_id: 0x00000000     # simulator default (check in Task 15)
+  product_code: 0x00000406
+  revision: 0x00010000
+  serial: 0x00000001
+  device_name: SIM-ENC-4096
+heartbeat_ms: 1000
+model:
+  type: encoder
+  resolution: 4096
+  multiturn: true
+  speed_rpm: 0.0
+# PDO numbers are 0-based: number 0 = TPDO1.
+tpdos:
+  - number: 0               # TPDO1: position value, every 100 ms and on change (max 100 Hz)
+    mapping: ["0x6004:0/32"]
+    transmission_type: 255
+    event_timer_ms: 100
+    inhibit_100us: 100
+  - number: 1               # TPDO2: position + speed, synchronous (every SYNC)
+    mapping: ["0x6004:0/32", "0x6030:1/16"]
+    transmission_type: 1
+rpdos: []
+sources:
+  - "CiA 406 v4.1.0 (PAS)"
+limits:
+  - "not certified by CiA; not a conformance-tested device"
+  - "no real-time timing: the position advances in steps of a few milliseconds"
+  - "position is integrated from a set speed; no acceleration, jitter or quantisation noise"
+  - "only operating parameters, resolution, preset, position and speed objects; no cams, alarms or diagnostics objects"

@@ -190,3 +190,11 @@ def test_heartbeat_disabled_and_enabled_via_od_set():
     od.set(0x1017, 0, 100)
     assert node.poll(1.0) == []
     assert node.poll(1.1) == [Frame(0x705, b"\x7f")]
+
+
+def test_nmt_with_wrong_dlc_ignored():
+    """NMT commands are exactly two bytes; longer frames are garbage."""
+    _, node = make()
+    node.boot(0.0)
+    assert node.handle(Frame(frames.NMT, bytes([0x01, ID, 0xFF])), 0.1) == []
+    assert node.state == NmtState.PRE_OPERATIONAL

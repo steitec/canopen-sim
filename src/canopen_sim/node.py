@@ -157,7 +157,7 @@ class Node:
         return self.state in (NmtState.PRE_OPERATIONAL, NmtState.OPERATIONAL)
 
     def _handle_nmt(self, data: bytes, now: float) -> list[Frame]:
-        if len(data) < 2 or data[1] not in (0, self.node_id):
+        if len(data) != 2 or data[1] not in (0, self.node_id):  # NMT DLC is 2
             return []
         cmd = data[0]
         if cmd == NMT_START:

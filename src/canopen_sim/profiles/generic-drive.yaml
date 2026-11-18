@@ -1,0 +1,45 @@
+name: generic-drive
+description: >
+  Generic servo drive (CiA 402 style object set as documented in public
+  manufacturer manuals): power state machine, profile velocity, profile
+  position and homing (methods 35/37), in increments and increments/s.
+identity:
+  device_type: 0x00020192   # profile 402 drive, servo (check in Task 15)
+  vendor_id: 0x00000000     # simulator default (check in Task 15)
+  product_code: 0x00000402
+  revision: 0x00010000
+  serial: 0x00000001
+  device_name: SIM-DRIVE-1
+heartbeat_ms: 1000
+model:
+  type: drive
+  max_velocity: 3000
+  acceleration: 1000
+  deceleration: 1000
+  following_error_window: 1000
+  temperature_limit: 80.0
+# PDO numbers are 0-based: number 0 = TPDO1 / RPDO1.
+tpdos:
+  - number: 0               # TPDO1: statusword + velocity actual value
+    mapping: ["0x6041:0/16", "0x606C:0/32"]
+    transmission_type: 255
+    inhibit_100us: 100
+  - number: 1               # TPDO2: statusword + position actual value
+    mapping: ["0x6041:0/16", "0x6064:0/32"]
+    transmission_type: 255
+    inhibit_100us: 100
+rpdos:
+  - number: 0               # RPDO1: controlword + target velocity
+    mapping: ["0x6040:0/16", "0x60FF:0/32"]
+  - number: 1               # RPDO2: controlword + target position
+    mapping: ["0x6040:0/16", "0x607A:0/32"]
+sources:
+  - "Kollmorgen AKD CANopen manual (edition: to be confirmed, see docs/source-check.md)"
+  - "SEW-EURODRIVE CANopen fieldbus manual (edition: to be confirmed, see docs/source-check.md)"
+  - "Synapticon SOMANET object dictionary (edition: to be confirmed, see docs/source-check.md)"
+limits:
+  - "not certified by CiA; not a conformance-tested device"
+  - "no real-time timing: the model is integrated in steps of a few milliseconds"
+  - "no load or motor model: following error is a fixed lag (20 ms times the velocity)"
+  - "no halt bit (controlword bit 8), no cyclic synchronous modes, only homing methods 35 and 37"
+  - "temperature and current faults are injected, not computed"
