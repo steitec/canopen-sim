@@ -145,7 +145,7 @@ class PdoEngine:
             if (timer > 0 and r.last_rx is not None and not r.deadline_hit
                     and now >= r.last_rx + timer - 1e-9):
                 r.deadline_hit = True
-                out += self.node.emergency(EMCY_RPDO_TIMEOUT, REG_COMMUNICATION)
+                out += self.node.emergency(EMCY_RPDO_TIMEOUT, REG_COMMUNICATION, now=now)
         return out
 
     # -- RPDO -------------------------------------------------------------
@@ -161,7 +161,7 @@ class PdoEngine:
             entries = self._entries(r.mapping)
             need = (sum(e[2] for e in entries) + 7) // 8
             if len(frame.data) < need:
-                out += self.node.emergency(EMCY_RPDO_LENGTH, REG_COMMUNICATION)
+                out += self.node.emergency(EMCY_RPDO_LENGTH, REG_COMMUNICATION, now=now)
             elif self.od.get(r.comm, 2) <= 240:
                 r.held = bytes(frame.data)
             else:

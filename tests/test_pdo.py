@@ -274,3 +274,14 @@ def test_rpdo_with_bad_mapping_never_raises():
     od.set(0x1600, 1, 0x20000010)
     od.set(0x1600, 1, 0x20010020)  # wider than object
     node.handle(Frame(RPDO1, b"\x01\x02\x03\x04"), 0.2)
+
+
+def test_pdo_emcy_honours_inhibit():
+    od, node = make(rpdos=[PdoSpec(0, [(0x2000, 0, 16)], event_timer_ms=100)])
+    od.set(0x1015, 0, 5000)  # 500 ms
+    start(node, 0.0)
+    out = node.handle(Frame(RPDO1, b"\x01"), 1.0)  # short: EMCY 0x8210 goes out
+    assert [f.data[:2] for f in out] == [b"\x10\x82"]
+    assert node.poll(1.2) == []  # deadline EMCY 0x8250 held back by inhibit
+    assert node.poll(1.4) == []
+    assert [f.data[:2] for f in node.poll(1.5)] == [b"\x50\x82"]
