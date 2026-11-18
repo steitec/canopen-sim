@@ -40,6 +40,8 @@ MODE_PROFILE_VELOCITY = 3
 MODE_HOMING = 6
 SUPPORTED_MODES = (MODE_PROFILE_POSITION, MODE_PROFILE_VELOCITY, MODE_HOMING)
 SUPPORTED_HOMING = (35, 37)  # both: current position is home
+# 0x6502 supported drive modes: bit n-1 per mode n (PP bit 0, PV bit 2, homing bit 5)
+SUPPORTED_MODES_BITS = sum(1 << (mode - 1) for mode in SUPPORTED_MODES)
 
 NOT_READY, SWITCH_ON_DISABLED, READY, SWITCHED_ON = 0, 1, 2, 3
 OPERATION_ENABLED, QUICK_STOP, FAULT_REACTION, FAULT = 4, 5, 6, 7
@@ -109,6 +111,7 @@ class DriveModel(Model):
             Variable(0x6098, 0, "Homing method", I8, "rw", SUPPORTED_HOMING[0]),
             Variable(0x60F4, 0, "Following error actual value", I32, "ro", 0),
             Variable(0x60FF, 0, "Target velocity", I32, "rw", 0, pdo_mappable=True),
+            Variable(0x6502, 0, "Supported drive modes", U32, "ro", SUPPORTED_MODES_BITS),
         ]
 
     def bind(self, od, emcy) -> None:

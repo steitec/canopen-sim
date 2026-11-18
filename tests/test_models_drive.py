@@ -314,3 +314,17 @@ def test_consistent_with_canopen_state402_masks():
     r.cw(State402.CW_SWITCH_ON_DISABLED)
     r.tick()
     assert state() == ["SWITCH ON DISABLED"]
+
+
+def test_supported_drive_modes_object():
+    """Regression (canopen cross-check): BaseNode402.op_mode reads 0x6502 before
+    switching; without it the client raised KeyError. Bits: PP 0, PV 2, homing 5."""
+    r = Rig()
+    var = r.od.entry(0x6502, 0)
+    assert var.access == "ro" and not var.pdo_mappable
+    assert r.od.get(0x6502, 0) == 0x25
+    OperationMode = pytest.importorskip("canopen.profiles.p402").OperationMode
+    for mode in ("PROFILED POSITION", "PROFILED VELOCITY", "HOMING"):
+        bits = OperationMode.SUPPORTED[mode]
+        assert r.od.get(0x6502, 0) & bits == bits
+    assert not r.od.get(0x6502, 0) & OperationMode.SUPPORTED["PROFILED TORQUE"]
