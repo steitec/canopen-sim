@@ -34,9 +34,9 @@ rpdos:
   - number: 1               # RPDO2: controlword + target position
     mapping: ["0x6040:0/16", "0x607A:0/32"]
 sources:
-  - "Kollmorgen AKD CANopen manual (edition: to be confirmed, see docs/source-check.md)"
-  - "SEW-EURODRIVE CANopen fieldbus manual (edition: to be confirmed, see docs/source-check.md)"
-  - "Synapticon SOMANET object dictionary (edition: to be confirmed, see docs/source-check.md)"
+  - "Kollmorgen AKD CANopen Communications Manual, edition Y, October 2020"
+  - "SEW-EURODRIVE, Inverters of the MOVI-C Modular Automation System with CiA402 Device Profile, edition 07/2023"
+  - "Synapticon SOMANET Software Reference Manual v4.1 (object dictionary, firmware errors)"
 limits:
   - "not certified by CiA; not a conformance-tested device"
   - "no real-time timing: the model is integrated in steps of a few milliseconds"

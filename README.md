@@ -209,7 +209,7 @@ Each profile names what it follows in `sources` and states what it does not do i
   is derived from the model (0x00020196 multi-turn, 0x00010196 single-turn) unless the
   profile sets `device_type` explicitly.
 - **generic-drive** follows the CANopen manuals of Kollmorgen (AKD), SEW-EURODRIVE and
-  Synapticon (SOMANET) as published, **not CiA 402 itself** (editions to be pinned in
+  Synapticon (SOMANET) as published, **not CiA 402 itself** (editions listed in
   `docs/source-check.md`). Limits: no load or motor model, the following error is a fixed
   lag (20 ms times the velocity), no halt bit (controlword bit 8), no cyclic synchronous
   modes, only homing methods 35 and 37; temperature and current faults are injected, not
