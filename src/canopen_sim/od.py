@@ -108,6 +108,7 @@ class ObjectDictionary:
         self._vars: dict[tuple[int, int], Variable] = {}
         self._indexes: set[int] = set()
         self._hooks: dict[tuple[int, int], list[Callable[[Any], None]]] = {}
+        self._listeners: list[Callable[[int, int], None]] = []
 
     def add(self, var: Variable) -> None:
         self._vars[(var.index, var.sub)] = var
@@ -127,7 +128,20 @@ class ObjectDictionary:
 
     def set(self, index: int, sub: int, value: Any) -> None:
         """Internal write: no access, range or callback handling."""
-        self.entry(index, sub).value = value
+        var = self.entry(index, sub)
+        changed = var.value != value
+        var.value = value
+        if changed:
+            self._notify(index, sub)
+
+    def on_change(self, fn: Callable[[int, int], None]) -> None:
+        """Register ``fn(index, sub)`` called after a stored value changed
+        (via ``set``, a successful ``sdo_write`` or ``pdo_write``)."""
+        self._listeners.append(fn)
+
+    def _notify(self, index: int, sub: int) -> None:
+        for fn in self._listeners:
+            fn(index, sub)
 
     def on_write(self, index: int, sub: int, fn: Callable[[Any], None]) -> None:
         """Register a callback run before a write is committed; it may raise
@@ -151,12 +165,26 @@ class ObjectDictionary:
                 raise SdoAbort(TOO_SHORT)
             if len(data) > size:
                 raise SdoAbort(TOO_LONG)
-        value = decode(var.dtype, data)
+        self._commit(var, decode(var.dtype, data))
+
+    def pdo_write(self, index: int, sub: int, value: Any) -> None:
+        """RPDO write path: no access check (objects may be "wo"), but range
+        checks, hooks and change notification still apply. Raises SdoAbort
+        on a veto or out-of-range value; the caller ignores it."""
+        var = self.entry(index, sub)
+        if var.access in ("ro", "const"):
+            raise SdoAbort(READ_ONLY)
+        self._commit(var, value)
+
+    def _commit(self, var: Variable, value: Any) -> None:
         if var.dtype not in (DataType.VISIBLE_STRING, DataType.OCTET_STRING):
             if var.high is not None and value > var.high:
                 raise SdoAbort(TOO_HIGH)
             if var.low is not None and value < var.low:
                 raise SdoAbort(TOO_LOW)
-        for fn in self._hooks.get((index, sub), ()):
+        for fn in self._hooks.get((var.index, var.sub), ()):
             fn(value)
+        changed = var.value != value
         var.value = value
+        if changed:
+            self._notify(var.index, var.sub)

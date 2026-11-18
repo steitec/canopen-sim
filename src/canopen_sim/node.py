@@ -5,12 +5,14 @@ Pure logic with an explicit ``now`` (seconds); no bus access and no threads.
 from __future__ import annotations
 
 import copy
+import struct
 from enum import IntEnum
 
 from . import frames
 from .comm_objects import set_node_id
 from .frames import Frame
 from .od import CANNOT_STORE, ObjectDictionary, SdoAbort
+from .pdo import PdoEngine
 from .sdo import SdoServer
 
 SAVE_SIGNATURE = 0x65766173  # "save"
@@ -41,6 +43,7 @@ class Node:
         if (0x1200, 1) in {(v.index, v.sub) for v in od.entries()}:
             set_node_id(od, node_id)
         self._defaults = _snapshot(od)
+        self.pdo = PdoEngine(self)
         self._stored: dict[tuple[int, int], object] | None = None
         self._hb_next: float | None = None
         self._hb_restart = False
@@ -51,7 +54,7 @@ class Node:
     # -- public API -------------------------------------------------------
 
     def listen_ids(self) -> set[int]:
-        return {frames.NMT, frames.SYNC, frames.sdo_rx(self.node_id)}
+        return {frames.NMT, frames.SYNC, frames.sdo_rx(self.node_id)} | self.pdo.rpdo_cob_ids()
 
     def boot(self, now: float) -> list[Frame]:
         """Enter PRE_OPERATIONAL and emit the boot-up frame."""
@@ -68,7 +71,18 @@ class Node:
             if self._hb_restart:
                 self._restart_heartbeat(now)
             return out
+        if frame.cob_id == frames.SYNC:
+            return self.pdo.on_sync(now)
+        if frame.cob_id in self.pdo.rpdo_cob_ids():
+            return self.pdo.on_rpdo(frame, now)
         return []
+
+    def emergency(self, code: int, register_bits: int, data: bytes = b"") -> list[Frame]:
+        """Build an EMCY frame and update the error register (0x1001)."""
+        register = (register_bits | 0x01) & 0xFF
+        self.od.set(0x1001, 0, register)
+        payload = struct.pack("<HB", code, register) + bytes(data[:5]).ljust(5, b"\0")
+        return [Frame(frames.emcy(self.node_id), payload)]
 
     def poll(self, now: float) -> list[Frame]:
         out: list[Frame] = []
@@ -85,6 +99,7 @@ class Node:
             self._hb_next += period
             if self._hb_next <= now:  # fell far behind: do not burst
                 self._hb_next = now + period
+        out += self.pdo.poll(now)
         return out
 
     # -- NMT --------------------------------------------------------------
@@ -97,7 +112,10 @@ class Node:
             return []
         cmd = data[0]
         if cmd == NMT_START:
+            was = self.state
             self.state = NmtState.OPERATIONAL
+            if was != NmtState.OPERATIONAL:
+                return self.pdo.on_operational(now)
         elif cmd == NMT_STOP:
             self.state = NmtState.STOPPED
             self.sdo.reset()

@@ -1,8 +1,12 @@
 """Mandatory CANopen communication-profile objects."""
 from __future__ import annotations
 
-from .frames import emcy, sdo_rx, sdo_tx
-from .od import DataType, ObjectDictionary, Variable
+from dataclasses import dataclass, field
+
+from .frames import emcy, rpdo, sdo_rx, sdo_tx, tpdo
+from .od import (
+    INCOMPATIBLE, NOT_MAPPABLE, PDO_LENGTH, DataType, ObjectDictionary, SdoAbort, Variable,
+)
 
 U8, U16, U32 = DataType.UNSIGNED8, DataType.UNSIGNED16, DataType.UNSIGNED32
 
@@ -55,3 +59,83 @@ def add_communication_objects(
     add(0x1200, 0, "SDO server: highest sub-index", U8, "const", 2)
     add(0x1200, 1, "COB-ID client to server", U32, "ro", 0x600)
     add(0x1200, 2, "COB-ID server to client", U32, "ro", 0x580)
+
+
+@dataclass
+class PdoSpec:
+    number: int  # 0..3
+    mapping: list[tuple[int, int, int]] = field(default_factory=list)  # (index, sub, bits)
+    transmission_type: int = 255
+    event_timer_ms: int = 0
+    inhibit_100us: int = 0
+    enabled: bool = True
+
+
+INVALID = 0x80000000
+
+
+def add_pdo_objects(
+    od: ObjectDictionary, node_id: int, *, tpdos: list[PdoSpec], rpdos: list[PdoSpec],
+) -> None:
+    """Add PDO communication (0x1400/0x1800+n) and mapping (0x1600/0x1A00+n)
+    objects. Call before ``Node(...)`` so reset restores them."""
+    for specs, comm_base, map_base, cob_of, is_tx in (
+        (rpdos, 0x1400, 0x1600, rpdo, False), (tpdos, 0x1800, 0x1A00, tpdo, True),
+    ):
+        for spec in specs:
+            if not 0 <= spec.number <= 3:
+                raise ValueError("PDO number must be 0..3")
+            if len(spec.mapping) > 8:
+                raise ValueError("at most 8 mapped objects")
+            _add_pdo(od, comm_base + spec.number, map_base + spec.number,
+                     cob_of(spec.number + 1, node_id), spec, is_tx)
+
+
+def _add_pdo(od, comm, mapi, cob, spec, is_tx):
+    def add(index, sub, name, dtype, access, value, **kw):
+        od.add(Variable(index, sub, name, dtype, access, value, **kw))
+
+    add(comm, 0, "Highest sub-index", U8, "const", 5)
+    add(comm, 1, "COB-ID", U32, "rw", cob | (0 if spec.enabled else INVALID))
+    add(comm, 2, "Transmission type", U8, "rw", spec.transmission_type)
+    if is_tx:
+        add(comm, 3, "Inhibit time", U16, "rw", spec.inhibit_100us)
+    add(comm, 5, "Event timer", U16, "rw", spec.event_timer_ms)
+    add(mapi, 0, "Number of mapped objects", U8, "rw", len(spec.mapping), high=8)
+    for i in range(8):
+        entry = 0
+        if i < len(spec.mapping):
+            index, sub, bits = spec.mapping[i]
+            entry = index << 16 | sub << 8 | bits
+        add(mapi, i + 1, f"Mapped object {i + 1}", U32, "rw", entry)
+
+    def require_disabled():
+        if not od.get(comm, 1) & INVALID:
+            raise SdoAbort(INCOMPATIBLE)
+
+    def on_cob(value):
+        current = od.get(comm, 1)
+        if not current & INVALID and value != current and not value & INVALID:
+            raise SdoAbort(INCOMPATIBLE)
+
+    def on_count(value):
+        require_disabled()
+        total = 0
+        for sub in range(1, value + 1):
+            entry = od.get(mapi, sub)
+            var = od.entry(entry >> 16, (entry >> 8) & 0xFF)
+            if not var.pdo_mappable:
+                raise SdoAbort(NOT_MAPPABLE)
+            total += entry & 0xFF
+        if total > 64:
+            raise SdoAbort(PDO_LENGTH)
+
+    def on_entry(_value):
+        require_disabled()
+        if od.get(mapi, 0) != 0:
+            raise SdoAbort(INCOMPATIBLE)
+
+    od.on_write(comm, 1, on_cob)
+    od.on_write(mapi, 0, on_count)
+    for sub in range(1, 9):
+        od.on_write(mapi, sub, on_entry)
