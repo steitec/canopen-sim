@@ -23,6 +23,7 @@ Bench YAML::
 """
 from __future__ import annotations
 
+import io
 import logging
 import threading
 import time
@@ -33,6 +34,7 @@ from typing import Any, Iterable
 import can
 import yaml
 
+from .eds import export_eds
 from .frames import Frame
 from .node import Node
 from .profile import ProfileError, build_node
@@ -55,6 +57,14 @@ def _default_channel(interface: str) -> str:
     if interface == "virtual":
         return f"canopen-sim-{uuid.uuid4().hex}"
     return "vcan0"
+
+
+def _import_canopen() -> Any:
+    try:
+        import canopen
+    except ImportError:
+        raise RuntimeError("this needs the canopen package: pip install canopen") from None
+    return canopen
 
 
 class Bench:
@@ -93,6 +103,7 @@ class Bench:
         # receive thread, the tick thread and callers all send through this lock
         # (recv stays outside it).
         self._send_lock = threading.Lock()
+        self._networks: list[Any] = []  # canopen.Network objects from network()
 
     # -- construction -----------------------------------------------------
 
@@ -219,6 +230,12 @@ class Bench:
         control, self._control = self._control, None
         if control is not None:
             control.stop()
+        networks, self._networks = self._networks, []
+        for network in networks:
+            try:
+                network.disconnect()
+            except Exception:  # noqa: BLE001 - a client error must not mask stop()
+                log.exception("network disconnect failed")
         self._stop.set()
         for thread in self._threads:
             if thread is not threading.current_thread():
@@ -295,6 +312,37 @@ class Bench:
             for name, node in self.nodes.items():
                 self._run(name, lambda n=node: n.tick(dt, now))
                 self._run(name, lambda n=node: n.poll(now))
+
+    # -- canopen client ---------------------------------------------------
+
+    def network(self) -> Any:
+        """A ``canopen.Network`` connected to the bench's bus (needs the
+        ``canopen`` package). It is disconnected when the bench stops."""
+        canopen = _import_canopen()
+        if not self.running:
+            raise RuntimeError("start the bench before bench.network()")
+        kwargs: dict[str, Any] = {}
+        if self.bitrate is not None and self.interface not in ("virtual", "socketcan"):
+            kwargs["bitrate"] = self.bitrate
+        network = canopen.Network()
+        network.NOTIFIER_CYCLE = 0.1  # faster disconnect than the 1 s default
+        network.connect(interface=self.interface, channel=self.channel, **kwargs)
+        self._networks.append(network)
+        return network
+
+    def remote_node(self, node: Any = None, *, cls: Any = None, network: Any = None) -> Any:
+        """A canopen node (``cls``, default ``canopen.RemoteNode``; e.g.
+        ``canopen.BaseNode402``) for one bench node, built from its exported EDS
+        and added to ``network`` (default: the bench's first network, created
+        on demand)."""
+        canopen = _import_canopen()
+        target = self.find(node)
+        stream = io.StringIO(export_eds(target))
+        stream.name = f"{target.name}.eds"  # canopen picks the format from the name
+        od = canopen.import_od(stream, target.node_id)
+        if network is None:
+            network = self._networks[0] if self._networks else self.network()
+        return network.add_node((cls or canopen.RemoteNode)(target.node_id, od))
 
     # -- access -----------------------------------------------------------
 

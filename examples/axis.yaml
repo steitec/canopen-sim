@@ -1,0 +1,6 @@
+# One simulated servo drive "axis" on node 3, on a virtual CAN bus.
+# The pytest plugin gives every test its own virtual channel; for a real
+# (virtual) CAN interface use e.g. {interface: socketcan, channel: vcan0}.
+bus: {interface: virtual}
+nodes:
+  - {profile: generic-drive, id: 3, name: axis, heartbeat_ms: 500}
