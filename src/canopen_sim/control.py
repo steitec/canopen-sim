@@ -14,7 +14,9 @@ channel has no authentication, so bind it to loopback (the default).
 """
 from __future__ import annotations
 
+import enum
 import json
+import math
 import os
 import socket
 import socketserver
@@ -26,6 +28,21 @@ if TYPE_CHECKING:
 
 CONTROL_PORT = 47100
 _MAX_LINE = 65536
+
+
+def _sanitise(value: Any) -> Any:
+    """Make ``value`` strictly JSON-able: NaN/inf -> null, bytes -> hex, enum -> name."""
+    if isinstance(value, enum.Enum):
+        return value.name
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).hex()
+    if isinstance(value, dict):
+        return {str(k): _sanitise(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_sanitise(v) for v in value]
+    return value
 
 
 class _Handler(socketserver.StreamRequestHandler):
@@ -52,7 +69,7 @@ class _Handler(socketserver.StreamRequestHandler):
                 if not raw.strip():
                     continue
                 answer = self.server.control.handle(raw)
-                self.wfile.write(json.dumps(answer).encode() + b"\n")
+                self.wfile.write(json.dumps(answer, allow_nan=False).encode() + b"\n")
         except OSError:
             return
 
@@ -102,7 +119,10 @@ class ControlServer:
             request = json.loads(raw)
             if not isinstance(request, dict):
                 raise ValueError("a request is a JSON object")
-            return self._handle(request)
+            answer = self._handle(request)
+            answer = _sanitise(answer)
+            json.dumps(answer, allow_nan=False)   # the handler can now always serialise
+            return answer
         except ValueError as error:          # JSONDecodeError, BenchError, FaultError
             return {"ok": False, "error": str(error)}
         except Exception as error:           # never drop the connection with a traceback

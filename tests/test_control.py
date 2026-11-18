@@ -91,3 +91,30 @@ def test_stop_closes_server(started):
     bench.stop()
     with pytest.raises(OSError):
         send_control({"list": True}, port=port, timeout=0.5)
+
+
+def test_unserialisable_values_are_sanitised(started):
+    import enum
+
+    class Mode(enum.IntEnum):
+        RUN = 1
+
+    bench = started(("axis", 3))
+    node = bench.nodes["axis"]
+    node.model.variables = lambda: {"a": float("nan"), "b": float("inf"), "c": b"\x01\xff",
+                                    "d": Mode.RUN, "e": 1.5}
+    answer = _call(bench, {"get": ["a", "b", "c", "d", "e"], "node": "axis"})
+    assert answer["values"] == {"a": None, "b": None, "c": "01ff", "d": "RUN", "e": 1.5}
+
+
+def test_unserialisable_object_keeps_connection(started):
+    bench = started(("axis", 3))
+    bench.nodes["axis"].model.variables = lambda: {"x": object()}
+    with socket.create_connection(("127.0.0.1", bench.control_port), timeout=2) as sock, \
+            sock.makefile("rwb") as stream:
+        stream.write(b'{"get": true}\n')
+        stream.flush()
+        assert json.loads(stream.readline())["ok"] is False
+        stream.write(b'{"list": true}\n')
+        stream.flush()
+        assert json.loads(stream.readline())["ok"] is True
