@@ -12,7 +12,7 @@ dict, then :meth:`Bench.start` it. Two threads serve the bus:
 
 Each node has its own lock, held while either thread touches it. An exception
 inside a node is logged on the ``canopen_sim`` logger and that frame is
-skipped; send errors are logged too. Neither thread dies from bad input.
+skipped; send errors are logged too. All sends share one bus-wide lock. Neither thread dies from bad input.
 
 Bench YAML::
 
@@ -86,6 +86,10 @@ class Bench:
         self._bus: can.BusABC | None = None
         self._stop = threading.Event()
         self._threads: list[threading.Thread] = []
+        # python-can does not promise thread-safe sends for every backend: the
+        # receive thread, the tick thread and callers all send through this lock
+        # (recv stays outside it).
+        self._send_lock = threading.Lock()
 
     # -- construction -----------------------------------------------------
 
@@ -228,8 +232,9 @@ class Bench:
             return
         for frame in frames:
             try:
-                bus.send(can.Message(arbitration_id=frame.cob_id, data=frame.data,
-                                     is_extended_id=False), timeout=RECV_TIMEOUT)
+                with self._send_lock:
+                    bus.send(can.Message(arbitration_id=frame.cob_id, data=frame.data,
+                                         is_extended_id=False), timeout=RECV_TIMEOUT)
             except (can.CanError, OSError, ValueError) as error:
                 log.error("cannot send COB-ID 0x%03X: %s", frame.cob_id, error)
 

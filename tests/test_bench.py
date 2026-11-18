@@ -205,3 +205,37 @@ def test_tick_dt_is_capped_after_a_stall(benches, channel):
     wait_until(lambda: len(dts) >= stalled_at + 3)
     assert max(dts) == bench_mod.MAX_DT
     assert all(0 < dt <= bench_mod.MAX_DT for dt in dts)
+
+
+def test_bus_sends_are_serialized(benches, channel):
+    """python-can backends are not promised to be thread-safe: every send from
+    the receive thread, the tick thread and callers goes through one lock."""
+    bench = start(benches, Bench.from_dict({
+        "bus": {"interface": "virtual"},
+        "nodes": [{"profile": "generic-io", "id": i, "name": f"io{i}"}
+                  for i in range(1, 5)]}), channel)
+    bus = bench._bus
+    original = bus.send
+    guard = threading.Lock()
+    state = {"inside": 0, "max": 0, "calls": 0}
+
+    def tracking(msg, timeout=None):
+        with guard:
+            state["inside"] += 1
+            state["calls"] += 1
+            state["max"] = max(state["max"], state["inside"])
+        threading.Event().wait(0.01)  # widen the window for overlaps
+        with guard:
+            state["inside"] -= 1
+        return original(msg, timeout)
+
+    bus.send = tracking
+    workers = [threading.Thread(target=bench.inject, args=("emcy",),
+                                kwargs={"node": f"io{i}", "code": 0x1000})
+               for i in range(1, 5)]
+    for w in workers:
+        w.start()
+    for w in workers:
+        w.join(2.0)
+    wait_until(lambda: state["calls"] >= 4)
+    assert state["max"] == 1
