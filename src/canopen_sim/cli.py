@@ -65,6 +65,10 @@ def _params(pairs: list[str]) -> dict[str, Any]:
     return params
 
 
+def _note(message: object) -> None:
+    print(f"note: {message}", file=sys.stderr, flush=True)
+
+
 def _error(message: object) -> None:
     print(f"{PROG}: {message}", file=sys.stderr)
 
@@ -163,6 +167,9 @@ def _cmd_serve(args, stop: threading.Event | None = None) -> int:
     except BenchError as error:
         _error(error)
         return 2
+    if bench.interface == "virtual":
+        _note("virtual bus is only reachable from this process; "
+              "use --interface socketcan --channel vcan0 for other tools")
     stop = stop or threading.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:

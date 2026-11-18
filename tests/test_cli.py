@@ -140,3 +140,19 @@ def test_broken_pipe_is_silent():
         f"{sys.executable} -m canopen_sim map generic-drive | head -1 >/dev/null",
         shell=True, stderr=subprocess.PIPE)
     assert shell.stderr == b""
+
+
+def test_serve_on_virtual_bus_prints_a_hint_to_stderr(capsys):
+    stop = threading.Event()
+    thread = threading.Thread(target=lambda: main(
+        ["serve", "--profile", "generic-drive", "--interface", "virtual",
+         "--control-port", "0"], stop=stop))
+    thread.start()
+    try:
+        err = []
+        wait_until(lambda: err.append(capsys.readouterr().err) or "note:" in "".join(err))
+        assert "virtual bus is only reachable from this process" in "".join(err)
+        assert "--interface socketcan --channel vcan0" in "".join(err)
+    finally:
+        stop.set()
+        thread.join(5)

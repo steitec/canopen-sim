@@ -22,11 +22,11 @@ drive commissioning with its `BaseNode402` (enable, run a velocity, fault, reset
 
 ```console
 $ canopen-sim serve --profile generic-drive --id 3 --interface socketcan --channel vcan0 &
-axis  id 3  generic-drive  vcan0
+generic-drive  id 3  generic-drive  vcan0
 control 127.0.0.1:47100
 $ canopen-sim state
 node              id  profile           nmt_state        faults                  errors
-axis               3  generic-drive     pre_operational  -                       -
+generic-drive      3  generic-drive     pre_operational  -                       -
 $ canopen-sim inject over_temperature     # the drive goes to FAULT and sends EMCY 0x4310
 $ canopen-sim clear
 ```
@@ -65,9 +65,11 @@ canopen-sim serve --profile generic-drive --id 3 --interface socketcan --channel
 candump vcan0                                   # in a second terminal
 ```
 
-Without `--interface`, `serve` runs on python-can's `virtual` bus, which only other
-processes using the same channel name can reach; that is what the test suite uses.
-On Windows and macOS only the virtual bus is available. A bench with several devices
+Without `--interface`, `serve` runs on python-can's `virtual` bus, which exists only
+inside one process: `candump`, another process or another tool cannot see it (`serve`
+prints a note saying so). It is what the pytest fixture and `Bench` in Python use. To
+reach a node from other processes you need `--interface socketcan`, on Linux. On Windows
+and macOS only the virtual bus is available. A bench with several devices
 (or a fixed bus) is a YAML file:
 
 ```yaml
