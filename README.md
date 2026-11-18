@@ -6,6 +6,9 @@
 # canopen-sim
 
 [![CI](https://github.com/steitec/canopen-sim/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/steitec/canopen-sim/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/canopen-sim?v=0.1.0)](https://pypi.org/project/canopen-sim/)
+[![Python](https://img.shields.io/pypi/pyversions/canopen-sim?v=0.1.0)](https://pypi.org/project/canopen-sim/)
+[![License](https://img.shields.io/pypi/l/canopen-sim?v=0.1.0)](https://github.com/steitec/canopen-sim/blob/main/LICENSE)
 
 Simulated **CANopen** devices that **behave**: a servo drive that walks through its power
 state machine, ramps to a target velocity and can be put into a fault by injecting an over-temperature fault, which you clear
