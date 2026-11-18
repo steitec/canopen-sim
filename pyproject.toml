@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "canopen-sim"
+version = "0.1.0"
+description = "Simulated CANopen devices with behaviour and fault injection: I/O modules and drives on a virtual or real CAN bus"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Ralf Steinert"}]
+requires-python = ">=3.10"
+dependencies = ["python-can>=4.4", "pyyaml>=6"]
+keywords = ["canopen", "can", "can bus", "cia", "simulator", "sdo", "pdo", "nmt",
+            "industrial automation", "test automation", "pytest"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "Framework :: Pytest",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Testing",
+    "Topic :: System :: Hardware",
+]
+
+[project.urls]
+Homepage = "https://github.com/steitec/canopen-sim"
+Repository = "https://github.com/steitec/canopen-sim"
+Changelog = "https://github.com/steitec/canopen-sim/blob/main/CHANGELOG.md"
+Issues = "https://github.com/steitec/canopen-sim/issues"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "build>=1.2", "canopen>=2.4,<3"]
+
+[project.scripts]
+canopen-sim = "canopen_sim.cli:main"
+
+[project.entry-points.pytest11]
+canopen_sim = "canopen_sim.pytest_plugin"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error"]
+
+[tool.setuptools.package-data]
+canopen_sim = ["profiles/*.yaml"]
