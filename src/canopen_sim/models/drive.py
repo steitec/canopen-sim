@@ -302,6 +302,14 @@ class DriveModel(Model):
         self._publish()
         return out
 
+    def on_reset(self, now: float | None) -> list[Frame]:
+        assert self.od is not None
+        out = super().on_reset(now)
+        if self._active:  # the drive stays in Fault; restore the error code
+            last = next(reversed(self._active))
+            self.od.set(0x603F, 0, self._FAULT_INFO[last][0])
+        return out
+
     def _try_reset(self, now: float) -> list[Frame]:
         assert self.od is not None
         out = self._clear_keys(sorted(self._self_raised & set(self._active)), now)

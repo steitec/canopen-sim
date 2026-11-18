@@ -120,3 +120,19 @@ def test_io_bad_inputs():
         m.clear("nope")
     with pytest.raises(ValueError):
         m.inject("over_range", channel=1, type="digital")
+
+
+def test_io_fault_survives_reset_communication():
+    from canopen_sim.frames import Frame
+    m = IoModel()
+    od, node = build(m)
+    node.model = m
+    m.inject("wire_break", now=1.0, channel=3)
+    out = node.handle(Frame(0x000, bytes([0x82, 1])), 2.0)
+    assert out[0].cob_id == 0x701 and out[0].data == b"\x00"
+    assert codes(out[1:]) == [0xFF01] and out[1].cob_id == 0x081
+    assert out[1].data[2] == 0x81
+    assert node.emcy.active() == [0xFF01]
+    assert od.get(0x1001, 0) & 0x81 == 0x81
+    assert codes(m.clear("wire_break", now=3.0)) == [0]
+    assert node.emcy.active() == []

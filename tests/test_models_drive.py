@@ -337,3 +337,25 @@ def test_switch_on_and_enable_from_ready():
     r.cw(0x0F)
     r.tick()
     assert r.sw() & 0x6F == 0x27
+
+
+@pytest.mark.parametrize("cmd", [0x81, 0x82])
+def test_fault_survives_nmt_reset_consistently(cmd):
+    from canopen_sim.frames import Frame
+    r = Rig()
+    r.node.model = r.m
+    r.enable(3)
+    r.m.inject("over_temperature", now=r.t)
+    r.tick()
+    r.tick()
+    out = r.node.handle(Frame(0x000, bytes([cmd, 1])), r.t)
+    assert out[0].cob_id == 0x701 and out[0].data == b"\x00"
+    assert [f.cob_id for f in out[1:]] == [0x081]
+    assert out[1].data[:2] == struct.pack("<H", 0x4310)
+    r.tick()
+    assert r.sw() & 0x4F == 0x08  # still Fault
+    assert r.od.get(0x603F, 0) == 0x4310
+    assert r.node.emcy.active() == [0x4310]
+    assert r.od.get(0x1001, 0) & 0x09 == 0x09
+    cleared = r.m.clear("over_temperature", now=r.t + 1)
+    assert cleared and cleared[0].data[:2] == b"\x00\x00"

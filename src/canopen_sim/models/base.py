@@ -24,6 +24,7 @@ class Model:
         self.emcy: Emcy | None = None
         # active faults: key -> EMCY code (or None for silent faults)
         self._active: dict[str, int | None] = {}
+        self._bits: dict[str, int] = {}  # key -> error register bits
 
     def objects(self) -> list[Variable]:
         """Profile-area objects; add them to the OD before the Node is built."""
@@ -46,6 +47,14 @@ class Model:
         """Clear exactly the fault instance ``key`` as listed by :meth:`faults`."""
         return self.clear(key, now)
 
+    def on_reset(self, now: float | None) -> list[Frame]:
+        """The node's EMCY state was wiped by an NMT reset: re-raise every
+        active fault so 0x1001/0x1003 and the EMCY frames agree again."""
+        out: list[Frame] = []
+        for key, code in list(self._active.items()):
+            out += self._raise(key, code, self._bits.get(key, 0), now)
+        return out
+
     def faults(self) -> list[str]:
         return list(self._active)
 
@@ -64,6 +73,7 @@ class Model:
     def _raise(self, key: str, code: int | None, bits: int,
                now: float | None) -> list[Frame]:
         self._active[key] = code
+        self._bits[key] = bits
         if code is None:
             return []
         assert self.emcy is not None, "model not bound"
@@ -72,6 +82,8 @@ class Model:
     def _clear_keys(self, keys: list[str], now: float | None) -> list[Frame]:
         """Drop faults; clear an EMCY code once no remaining fault uses it."""
         codes = [self._active.pop(k) for k in keys]
+        for k in keys:
+            self._bits.pop(k, None)
         out: list[Frame] = []
         for code in dict.fromkeys(c for c in codes if c is not None):
             if code not in self._active.values():

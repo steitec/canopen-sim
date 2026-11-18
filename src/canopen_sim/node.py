@@ -128,7 +128,16 @@ class Node:
     def _reset(self, now: float) -> list[Frame]:
         self._restore(lambda key: True)
         self.emcy.reset()
-        return self.boot(now)
+        return self._boot_with_faults(now)
+
+    def _boot_with_faults(self, now: float) -> list[Frame]:
+        """Boot-up first, then the EMCYs of faults a model still holds."""
+        out = self.boot(now)
+        if self.model is not None:
+            extra = self.model.on_reset(now)
+            if not self._nf.muted():
+                out = out + extra
+        return out
 
     def poll(self, now: float) -> list[Frame]:
         answers = self.sdo.poll(now) if self._sdo_active() else []
@@ -176,7 +185,7 @@ class Node:
         elif cmd == NMT_RESET_COMM:
             self._restore(lambda key: 0x1000 <= key[0] <= 0x1FFF)
             self.emcy.reset()
-            return self.boot(now)
+            return self._boot_with_faults(now)
         return []
 
     def _restore(self, selected) -> None:
