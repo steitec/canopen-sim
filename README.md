@@ -188,12 +188,26 @@ $ canopen-sim export-eds generic-drive --id 3 -o drive.eds
 Each profile names what it follows in `sources` and states what it does not do in
 `limits` (shown by `canopen-sim map`):
 
-- **generic-io** follows CiA 401-1 and 401-2 v3.1.0 (PAS). Limits: only 8-bit digital and
-  16-bit analog objects, no polarity, filter or interrupt-mask objects; wire break uses
-  a manufacturer-specific EMCY code because CiA 401 defines none.
-- **generic-encoder** follows CiA 406 v4.1.0 (PAS). Limits: operating parameters,
-  resolution, preset, position and speed objects only; no cams, alarms or diagnostics;
-  no acceleration, jitter or quantisation noise.
+- **generic-io** follows CiA 401-1 v3.1.0 (PAS). Limits: only 8-bit digital and
+  16-bit analog objects, no polarity, filter or interrupt-mask objects (except the analog
+  global interrupt enable below); wire break uses a manufacturer-specific EMCY code because
+  CiA 401 defines none. Analog input interrupt: object 0x6423 (BOOLEAN, rw, PDO-mappable)
+  defaults to FALSE, so changes of the analog inputs do not trigger event-driven TPDOs
+  until a master sets it TRUE (digital inputs are not affected; event timer and SYNC
+  transmissions still work). When the node enters OPERATIONAL while 0x6423 is FALSE it
+  sends the warning EMCY 0x0080 (error register generic bit) and stays OPERATIONAL; the
+  warning is cleared (EMCY 0x0000) as soon as 0x6423 is set TRUE. An NMT reset forgets it.
+- **generic-encoder** follows CiA 406 v4.1.0 (PAS) and is modelled as class C1: operating
+  parameters, resolution, preset, position and speed plus the C1 objects 0x6500 (operating
+  status, mirrors the code-sequence bit), 0x6501 (single-turn resolution) and 0x6502
+  (distinguishable revolutions: 65536 for multi-turn, 1 for single-turn, a fixed simulator
+  value while the position counter wraps at 2^32). No alarms or warnings objects, no total
+  measuring range (0x6002), no cyclic timer (0x6200), no cams or diagnostics; no
+  acceleration, jitter or quantisation noise. The speed value 0x6030:1 is in steps per
+  second (the configured rpm times the resolution divided by 60) and is clamped to
+  INTEGER16, so fast or high-resolution settings saturate at -32768..32767. The device type
+  is derived from the model (0x00020196 multi-turn, 0x00010196 single-turn) unless the
+  profile sets `device_type` explicitly.
 - **generic-drive** follows the CANopen manuals of Kollmorgen (AKD), SEW-EURODRIVE and
   Synapticon (SOMANET) as published, **not CiA 402 itself** (editions to be pinned in
   `docs/source-check.md`). Limits: no load or motor model, the following error is a fixed
@@ -203,7 +217,8 @@ Each profile names what it follows in `sources` and states what it does not do i
 
 Every device has the mandatory communication objects (0x1000 to 0x1018, including
 store/restore with the `save`/`load` signatures, in memory only) and the vendor ID is 0
-unless a profile overrides it. Describe your own device in a YAML profile (see
+unless a profile overrides it. Vendor ID 0 means no assigned CANopen vendor ID, which
+CiA 301 treats as invalid; set your own in a profile override if your master needs one. Describe your own device in a YAML profile (see
 `src/canopen_sim/profiles/` for the format) and pass it to `--profile` or a bench.
 
 ## CLI reference

@@ -4,7 +4,8 @@ description: >
   The position is integrated from a configurable speed; preset and counting
   direction are supported.
 identity:
-  device_type: 0x00020196   # profile 406, multi-turn absolute rotary encoder (check in Task 15)
+  # device_type omitted: derived from the model (0x00020196 multi-turn, 0x00010196 single-turn,
+  # profile 406); an explicit device_type here overrides it
   vendor_id: 0x00000000     # 0 = no assigned CANopen vendor ID (CiA 301 treats 0 as invalid); override if needed
   product_code: 0x00000406
   revision: 0x00010000
@@ -33,4 +34,6 @@ limits:
   - "not certified by CiA; not a conformance-tested device"
   - "no real-time timing: the position advances in steps of a few milliseconds"
   - "position is integrated from a set speed; no acceleration, jitter or quantisation noise"
-  - "only operating parameters, resolution, preset, position and speed objects; no cams, alarms or diagnostics objects"
+  - "modelled as CiA 406 class C1: no alarms or warnings objects, no total measuring range (0x6002), no cyclic timer (0x6200), no cams or diagnostics"
+  - "speed value (0x6030:1) is in steps per second, clamped to INTEGER16 (-32768..32767)"
+  - "0x6502 reports 65536 distinguishable revolutions for multi-turn (1 for single-turn); the position counter itself wraps at 2^32"

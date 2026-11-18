@@ -37,5 +37,6 @@ sources:
 limits:
   - "not certified by CiA; not a conformance-tested device"
   - "no real-time timing: frames are produced by Python threads every few milliseconds"
-  - "only 8-bit digital and 16-bit analog objects; no polarity, filter or interrupt-mask objects"
+  - "only 8-bit digital and 16-bit analog objects; no polarity, filter or interrupt-mask objects; the only interrupt object is the analog global enable 0x6423"
+  - "0x6423 defaults to FALSE: analog input changes do not trigger event TPDOs until it is set TRUE; entering OPERATIONAL while FALSE sends EMCY 0x0080 (warning, state unchanged), cleared by EMCY 0x0000 once 0x6423 is set TRUE"
   - "the wire-break EMCY code 0xFF01 is manufacturer-specific (CiA 401 defines none)"

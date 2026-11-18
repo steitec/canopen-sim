@@ -16,5 +16,15 @@ First release.
   switchable at runtime over a loopback JSON control channel.
 - CLI (`list`, `map`, `export-eds`, `serve`, `inject`, `clear`, `state`), EDS export (checked by
   importing it with `canopen`), pytest plugin with `canopen_bench` fixtures.
+- Source check against the CiA PAS documents:
+  - PDO COB-ID changes while valid and reserved transmission types (241 to 253) abort with
+    0x06090030.
+  - 0x1003 entries beyond the recorded error count abort with 0x08000024.
+  - generic-io: analog input global interrupt enable 0x6423 (default FALSE) gates
+    change-triggered analog TPDOs; entering OPERATIONAL while FALSE sends EMCY 0x0080,
+    cleared when 0x6423 is set TRUE; `sources` lists CiA 401-1 only.
+  - generic-encoder: speed value in steps per second (clamped to INTEGER16), class C1
+    objects 0x6500, 0x6501 and 0x6502, device type derived from multi-turn or single-turn.
+  - Vendor ID 0 is documented as "no assigned vendor ID" in the README and the profiles.
 - Cross-checked against the `canopen` library, including drive commissioning with
   `BaseNode402`; CI on Linux, Windows and macOS plus a `vcan0` job.
