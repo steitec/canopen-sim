@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from .frames import emcy, rpdo, sdo_rx, sdo_tx, tpdo
 from .od import (
-    INCOMPATIBLE, NOT_MAPPABLE, PDO_LENGTH, DataType, ObjectDictionary, SdoAbort, Variable, encode,
+    INCOMPATIBLE, NOT_MAPPABLE, PDO_LENGTH, RANGE, DataType, ObjectDictionary, SdoAbort, Variable, encode,
 )
 
 U8, U16, U32 = DataType.UNSIGNED8, DataType.UNSIGNED16, DataType.UNSIGNED32
@@ -116,8 +116,14 @@ def _add_pdo(od, comm, mapi, cob, spec, is_tx):
 
     def on_cob(value):
         current = od.get(comm, 1)
-        if not current & INVALID and value != current and not value & INVALID:
-            raise SdoAbort(INCOMPATIBLE)
+        # valid PDO: bits 0-29 may only change together with setting bit 31
+        if not current & INVALID and not value & INVALID \
+                and (value ^ current) & 0x3FFFFFFF:
+            raise SdoAbort(RANGE)
+
+    def on_type(value):
+        if 241 <= value <= 253:  # reserved transmission types
+            raise SdoAbort(RANGE)
 
     def on_count(value):
         require_disabled()
@@ -146,6 +152,7 @@ def _add_pdo(od, comm, mapi, cob, spec, is_tx):
             raise SdoAbort(INCOMPATIBLE)
 
     od.on_write(comm, 1, on_cob)
+    od.on_write(comm, 2, on_type)
     od.on_write(mapi, 0, on_count)
     for sub in range(1, 9):
         od.on_write(mapi, sub, on_entry)

@@ -5,7 +5,7 @@ from canopen_sim.comm_objects import PdoSpec, add_communication_objects, add_pdo
 from canopen_sim.frames import Frame
 from canopen_sim.node import Node, NmtState
 from canopen_sim.od import (
-    INCOMPATIBLE, NOT_MAPPABLE, PDO_LENGTH, DataType, ObjectDictionary, SdoAbort, Variable,
+    INCOMPATIBLE, NOT_MAPPABLE, PDO_LENGTH, RANGE, DataType, ObjectDictionary, SdoAbort, Variable,
 )
 
 ID = 5
@@ -168,7 +168,7 @@ def test_no_pdo_outside_operational():
 
 def test_remap_valid_pdo_rejected():
     od, _ = make([tp()])
-    for idx, sub, val in [(0x1A00, 0, 0), (0x1A00, 1, 0x20010008), (0x1800, 1, 0x1FF)]:
+    for idx, sub, val in [(0x1A00, 0, 0), (0x1A00, 1, 0x20010008)]:
         try:
             od.sdo_write(idx, sub, struct.pack("<I" if sub or idx == 0x1800 else "<B", val))
         except SdoAbort as e:
@@ -176,6 +176,33 @@ def test_remap_valid_pdo_rejected():
         else:
             raise AssertionError("expected abort")
     assert od.get(0x1A00, 0) == 1
+
+
+def test_cob_id_change_while_valid_is_range_error():
+    od, _ = make([tp()], [PdoSpec(0, [(0x2001, 0, 8)])])
+    for idx in (0x1800, 0x1400):
+        try:
+            od.sdo_write(idx, 1, struct.pack("<I", 0x1FF))
+        except SdoAbort as e:
+            assert e.code == RANGE == 0x06090030
+        else:
+            raise AssertionError("expected abort")
+    assert od.get(0x1800, 1) == TPDO1
+
+
+def test_unsupported_transmission_type_is_range_error():
+    od, _ = make([tp()], [PdoSpec(0, [(0x2001, 0, 8)])])
+    for idx in (0x1800, 0x1400):
+        for bad in (241, 253):
+            try:
+                od.sdo_write(idx, 2, bytes([bad]))
+            except SdoAbort as e:
+                assert e.code == RANGE
+            else:
+                raise AssertionError("expected abort")
+        for good in (0, 1, 240, 254, 255):
+            od.sdo_write(idx, 2, bytes([good]))
+            assert od.get(idx, 2) == good
 
 
 def w(od, idx, sub, val, fmt="<I"):
