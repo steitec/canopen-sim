@@ -277,3 +277,48 @@ def test_faultset_api():
     assert fs.take("pdo_dropout")["every"] == 4 and fs.take("pdo_dropout")
     fs.clear()
     assert fs.active() == []
+
+
+def test_every_listed_fault_can_be_cleared():
+    _, node = make(model=IoModel())
+    node.inject("wire_break", channel=1)
+    node.inject("wire_break", channel=2)
+    node.inject("short_circuit", channel=1)
+    node.inject("emcy")
+    for key in list(node.faults()):
+        node.clear(key)
+        assert key not in node.faults()
+    assert node.faults() == [] and node.emcy.active() == []
+
+
+def test_clear_base_name_clears_all_channels():
+    _, node = make(model=IoModel())
+    node.inject("wire_break", channel=1)
+    node.inject("wire_break", channel=2)
+    node.inject("short_circuit", channel=1)
+    node.clear("wire_break")
+    assert node.faults() == ["short_circuit:digital:1"]
+    with pytest.raises(FaultError):
+        node.clear("wire_break:digital:9")
+
+
+def test_delayed_answer_due_while_muted_is_dropped():
+    _, node = make()
+    node.inject("sdo_delay", seconds=0.5)
+    assert read(node, 0x1000, now=1.0) == []
+    node.clear("sdo_delay")
+    node.inject("mute")
+    assert node.poll(2.0) == []
+    node.clear("mute")
+    assert [f for f in node.poll(3.0) if f.cob_id == SDO_TX] == []
+
+
+def test_delayed_answer_due_while_stopped_is_dropped():
+    _, node = make()
+    node.inject("sdo_delay", seconds=0.5)
+    assert read(node, 0x1000, now=1.0) == []
+    node.clear("sdo_delay")
+    node.handle(Frame(frames.NMT, bytes([2, ID])), 1.1)
+    assert [f for f in node.poll(2.0) if f.cob_id == SDO_TX] == []
+    node.handle(Frame(frames.NMT, bytes([0x80, ID])), 2.1)
+    assert [f for f in node.poll(3.0) if f.cob_id == SDO_TX] == []

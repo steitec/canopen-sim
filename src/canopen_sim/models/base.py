@@ -42,6 +42,10 @@ class Model:
     def clear(self, kind: str | None = None, now: float | None = None) -> list[Frame]:
         raise NotImplementedError
 
+    def clear_key(self, key: str, now: float | None = None) -> list[Frame]:
+        """Clear exactly the fault instance ``key`` as listed by :meth:`faults`."""
+        return self.clear(key, now)
+
     def faults(self) -> list[str]:
         return list(self._active)
 

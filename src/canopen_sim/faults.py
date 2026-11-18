@@ -4,7 +4,8 @@
 enip-sim's). A fault with a finite ``count`` fires that many times, otherwise it stays
 until cleared. :class:`NodeFaults` applies them to a node: it filters SDO traffic and
 TPDO frames, owns the queue of delayed SDO answers and routes ``inject``/``clear`` to the
-catalogue, the behaviour model and the EMCY producer. Pure logic with an explicit ``now``.
+catalogue (``mute`` means the node sends nothing: delayed SDO answers that come due
+while muted are dropped, not held back), the behaviour model and the EMCY producer. Pure logic with an explicit ``now``.
 """
 from __future__ import annotations
 
@@ -169,7 +170,10 @@ class NodeFaults:
     def clear(self, kind: str | None, now: float | None) -> list[Frame]:
         out: list[Frame] = []
         if kind is not None and self._model_has(kind):
-            return self.node.model.clear(kind, now)
+            return self.node.model.clear(kind, now)  # base name: every instance
+        if kind is not None and self.node.model is not None \
+                and kind in self.node.model.faults():
+            return self.node.model.clear_key(kind, now)  # full key from faults()
         if kind is not None and kind not in CATALOG:
             raise FaultError(
                 f"unknown fault {kind!r}; known: {', '.join(known_names(self.node.model))}")
@@ -194,6 +198,9 @@ class NodeFaults:
     def active(self) -> list[str]:
         model = self.node.model
         return self.fs.active() + (model.faults() if model is not None else [])
+
+    def drop_queue(self) -> None:
+        self._queue.clear()
 
     def on_reset(self) -> None:
         """Node reset: the node forgets its injected EMCY and queued answers."""

@@ -132,8 +132,9 @@ class Node:
 
     def poll(self, now: float) -> list[Frame]:
         answers = self.sdo.poll(now) if self._sdo_active() else []
-        out: list[Frame] = [Frame(frames.sdo_tx(self.node_id), d)
-                            for d in self._nf.defer(answers, now)]
+        due = self._nf.defer(answers, now)
+        out: list[Frame] = [Frame(frames.sdo_tx(self.node_id), d) for d in due
+                            if self._sdo_active()]  # not answered while STOPPED
         period = self.od.get(0x1017, 0) / 1000.0
         if period <= 0:
             self._hb_next = None  # 0x1017 disabled (also via od.set)
@@ -167,6 +168,7 @@ class Node:
         elif cmd == NMT_STOP:
             self.state = NmtState.STOPPED
             self.sdo.reset()
+            self._nf.drop_queue()
         elif cmd == NMT_PRE_OP:
             self.state = NmtState.PRE_OPERATIONAL
         elif cmd == NMT_RESET_NODE:

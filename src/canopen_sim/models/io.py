@@ -144,10 +144,16 @@ class IoModel(Model):
         self._update(self._last_now if now is None else now)
         return frames
 
+    def clear_key(self, key: str, now: float | None = None) -> list[Frame]:
+        return self._clear_keys_now([key] if key in self._faults else [], now)
+
     def clear(self, kind: str | None = None, now: float | None = None) -> list[Frame]:
         if kind is not None:
             self._check_kind(kind)
         keys = [k for k, f in self._faults.items() if kind is None or f[0] == kind]
+        return self._clear_keys_now(keys, now)
+
+    def _clear_keys_now(self, keys: list[str], now: float | None) -> list[Frame]:
         for k in keys:
             del self._faults[k]
         frames = self._clear_keys(keys, now)
