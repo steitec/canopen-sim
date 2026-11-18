@@ -244,7 +244,7 @@ def test_over_temperature_fault_and_reset():
 def test_over_current_and_register_bits():
     r = Rig()
     r.m.inject("over_current", now=r.t)
-    assert r.od.get(0x603F, 0) == 0x2310
+    assert r.od.get(0x603F, 0) == 0x2220
     assert r.od.get(0x1001, 0) & 0x02
     r.m.clear(now=r.t)
     assert r.od.get(0x1001, 0) == 0

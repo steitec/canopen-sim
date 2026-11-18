@@ -148,7 +148,7 @@ firings.
 | fault | EMCY code | error register bit | effect |
 |---|---|---|---|
 | `over_temperature` | 0x4310 | temperature | enters the fault reaction, then FAULT; error code 0x603F set |
-| `over_current` | 0x2310 | current | the same |
+| `over_current` | 0x2220 | current | the same |
 | `following_error` | 0x8611 | manufacturer-specific | the same; also raised by the model when the following error exceeds 0x6065 |
 
 `clear` removes the cause and sends EMCY 0x0000; the drive leaves FAULT on the next

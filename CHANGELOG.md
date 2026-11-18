@@ -25,6 +25,8 @@ First release.
     cleared when 0x6423 is set TRUE; `sources` lists CiA 401-1 only.
   - generic-encoder: speed value in steps per second (clamped to INTEGER16), class C1
     objects 0x6500, 0x6501 and 0x6502, device type derived from multi-turn or single-turn.
+  - generic-drive: `over_current` uses EMCY / 0x603F code 0x2220 (device internal continuous
+    over current, as in the public Synapticon SOMANET error list) instead of 0x2310.
   - Vendor ID 0 is documented as "no assigned vendor ID" in the README and the profiles.
 - Cross-checked against the `canopen` library, including drive commissioning with
   `BaseNode402`; CI on Linux, Windows and macOS plus a `vcan0` job.
