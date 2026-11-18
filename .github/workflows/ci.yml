@@ -25,7 +25,7 @@ jobs:
       - run: pytest -v examples/test_example.py
 
   vcan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -35,8 +35,13 @@ jobs:
       - name: Virtual CAN interface and can-utils
         run: |
           sudo apt-get update
-          sudo apt-get install -y can-utils linux-modules-extra-$(uname -r)
-          sudo modprobe vcan
+          sudo apt-get install -y can-utils
+          # vcan is built in or in the base modules on most kernels; only fall
+          # back to the extra-modules package when modprobe fails
+          sudo modprobe vcan || {
+            sudo apt-get install -y "linux-modules-extra-$(uname -r)"
+            sudo modprobe vcan
+          }
           sudo ip link add dev vcan0 type vcan
           sudo ip link set up vcan0
           ip -details link show vcan0

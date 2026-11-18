@@ -60,7 +60,9 @@ def test_canopen_pdo_read(drive):
     assert [v.index for v in node.tpdo[1].map] == [0x6041, 0x606C]
     node.nmt.state = "OPERATIONAL"
     assert node.tpdo[1].wait_for_reception(timeout=2.0) is not None
-    assert node.tpdo[1]["Statusword"].raw & 0x4F == 0x40      # switch on disabled
+    # wait for the value instead of asserting the first frame (slow runners)
+    wait_until(lambda: node.tpdo[1]["Statusword"].raw & 0x4F == 0x40,
+               timeout=5.0)                                   # switch on disabled
 
 
 def test_canopen_emcy(drive):

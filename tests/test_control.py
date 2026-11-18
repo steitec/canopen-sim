@@ -82,7 +82,10 @@ def test_line_too_long(started):
         sock.sendall(b"x" * 70000 + b"\n")
         answer = json.loads(stream.readline())
         assert answer["ok"] is False and "too long" in answer["error"]
-        assert stream.readline() == b""
+        try:
+            assert stream.readline() == b""
+        except ConnectionResetError:    # a platform may still reset after the answer
+            pass
 
 
 def test_stop_closes_server(started):

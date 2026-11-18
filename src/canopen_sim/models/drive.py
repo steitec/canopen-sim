@@ -119,6 +119,10 @@ class DriveModel(Model):
         od.on_write(0x6040, 0, self._on_controlword)
         od.on_write(0x6060, 0, self._on_mode)
         od.on_write(0x6098, 0, self._on_homing_method)
+        # not ready -> switch on disabled is automatic (CiA 402 transition 1):
+        # the first statusword that can leave the node is already 0x0240.
+        if self._state == NOT_READY:
+            self._state = SWITCH_ON_DISABLED
         self._publish()
 
     # -- write hooks ------------------------------------------------------

@@ -21,6 +21,7 @@ import os
 import socket
 import socketserver
 import threading
+import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -54,6 +55,21 @@ class _Handler(socketserver.StreamRequestHandler):
         self.server.connections.discard(self.request)
         super().finish()
 
+    def _drain(self, limit: float = 1.0) -> None:
+        """Read and discard the rest of the client's input (until EOF or ``limit``
+        seconds), so closing does not send RST and cost the client our answer."""
+        deadline = time.monotonic() + limit
+        self.request.settimeout(0.1)
+        try:
+            while time.monotonic() < deadline:
+                try:
+                    if not self.request.recv(65536):
+                        return
+                except socket.timeout:
+                    continue
+        except OSError:
+            return
+
     def handle(self) -> None:
         try:
             while True:
@@ -65,6 +81,7 @@ class _Handler(socketserver.StreamRequestHandler):
                                      .encode() + b"\n")
                     self.wfile.flush()
                     self.request.shutdown(socket.SHUT_WR)
+                    self._drain()
                     return
                 if not raw.strip():
                     continue

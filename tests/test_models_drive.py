@@ -69,10 +69,10 @@ def test_objects():
 def test_power_up_to_switch_on_disabled():
     m = DriveModel()
     od, _ = build(m)
-    assert od.get(0x6041, 0) & 0x4F == 0x00  # not ready to switch on
+    # the automatic transition is already done when the node is built
+    assert od.get(0x6041, 0) == 0x0240
     m.tick(0.01, 0.01)
-    assert od.get(0x6041, 0) & 0x6F == 0x40
-    assert od.get(0x6041, 0) & 0x200  # remote
+    assert od.get(0x6041, 0) == 0x0240
 
 
 def test_enable_sequence_statuswords():
