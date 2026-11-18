@@ -43,11 +43,11 @@ class Emcy:
         register = self._update_register()
         self._push_history(code)
         payload = struct.pack("<HB", code, register) + bytes(data[:5]).ljust(5, b"\0")
-        return self._send(Frame(frames.emcy(self.node.node_id), payload), now)
+        return self._send(payload, now)
 
     def clear(self, code: int | None = None, now: float | None = None) -> list[Frame]:
-        """Clear one error (or all). The reset frame goes out when the last
-        active error is gone; clearing one of several only updates 0x1001."""
+        """Clear one error (or all). Sends code 0 with the remaining error
+        register (0 when the last error is gone)."""
         if not self._active:
             return []
         if code is None:
@@ -58,9 +58,8 @@ class Emcy:
                 return []
             self._active = remaining
         self._update_register()
-        if self._active:
-            return []
-        return self._send(Frame(frames.emcy(self.node.node_id), bytes(8)), now)
+        register = self.node.od.get(0x1001, 0)  # 0 after the last error is gone
+        return self._send(struct.pack("<HB", 0, register) + bytes(5), now)
 
     def active(self) -> list[int]:
         return [code for code, _ in self._active]
@@ -118,9 +117,11 @@ class Emcy:
         inhibit = self.node.od.get(0x1015, 0) * 1e-4
         return now >= self._last_sent + inhibit - 1e-9
 
-    def _send(self, frame: Frame, now: float | None) -> list[Frame]:
-        if not self._can_transmit():
+    def _send(self, payload: bytes, now: float | None) -> list[Frame]:
+        cob = self.node.od.get(0x1014, 0)
+        if not self._can_transmit() or cob & 0x80000000:
             return []
+        frame = Frame(cob & 0x7FF, payload)
         if self._queue or not self._may_send(now):
             self._queue.append(frame)
             return []

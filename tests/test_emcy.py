@@ -55,7 +55,9 @@ def test_error_reset_frame_when_last_cleared():
     od, node = booted()
     node.emcy.raise_error(0x2310, CURRENT, now=0.0)
     node.emcy.raise_error(0x3100, VOLTAGE, now=0.0)
-    assert node.emcy.clear(0x2310, now=1.0) == []
+    # one of several cleared: code 0 with the remaining register
+    assert node.emcy.clear(0x2310, now=1.0) == [
+        Frame(frames.emcy(ID), struct.pack("<HB", 0, 0x05) + bytes(5))]
     assert od.get(0x1001, 0) == 0x05  # voltage + generic
     assert node.emcy.clear(now=2.0) == [Frame(frames.emcy(ID), bytes(8))]
     assert od.get(0x1001, 0) == 0 and node.emcy.active() == []
@@ -88,3 +90,17 @@ def test_reset_clears_active_errors():
     node.emcy.raise_error(0x2310, CURRENT, now=0.0)
     node.handle(nmt(0x82), 1.0)
     assert node.emcy.active() == [] and od.get(0x1001, 0) == 0
+
+
+def test_emcy_cob_id_from_0x1014():
+    od, node = booted()
+    od.set(0x1014, 0, 0x0123)
+    assert node.emcy.raise_error(0x2310, CURRENT, now=0.0)[0].cob_id == 0x123
+
+
+def test_emcy_disabled_by_bit31():
+    od, node = booted()
+    od.set(0x1014, 0, 0x80000000 | frames.emcy(ID))
+    assert node.emcy.raise_error(0x2310, CURRENT, now=0.0) == []
+    assert node.emcy.clear(now=1.0) == []
+    assert od.get(0x1003, 1) == 0x2310 and od.get(0x1001, 0) == 0

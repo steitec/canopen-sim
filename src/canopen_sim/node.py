@@ -43,6 +43,8 @@ class Node:
         self.sdo = SdoServer(od, node_id)
         if (0x1200, 1) in {(v.index, v.sub) for v in od.entries()}:
             set_node_id(od, node_id)
+        if (0x1014, 0) in {(v.index, v.sub) for v in od.entries()}:
+            od.set(0x1014, 0, frames.emcy(node_id))
         self._defaults = _snapshot(od)
         self.pdo = PdoEngine(self)
         self.emcy = Emcy(self)
