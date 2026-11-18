@@ -5,7 +5,7 @@ description: >
   unless a signal or a fault drives them.
 identity:
   device_type: 0x000F0191   # profile 401, digital + analog in/out (check in Task 15)
-  vendor_id: 0x00000000     # simulator default (check in Task 15)
+  vendor_id: 0x00000000     # 0 = no assigned CANopen vendor ID (CiA 301 treats 0 as invalid); override if needed
   product_code: 0x00000401
   revision: 0x00010000
   serial: 0x00000001
@@ -34,7 +34,6 @@ rpdos:
     mapping: ["0x6411:1/16", "0x6411:2/16"]
 sources:
   - "CiA 401-1 v3.1.0 (PAS)"
-  - "CiA 401-2 v3.1.0 (PAS)"
 limits:
   - "not certified by CiA; not a conformance-tested device"
   - "no real-time timing: frames are produced by Python threads every few milliseconds"

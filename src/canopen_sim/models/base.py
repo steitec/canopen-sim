@@ -37,6 +37,14 @@ class Model:
     def tick(self, dt: float, now: float) -> list[Frame]:
         return []
 
+    def on_operational(self, now: float) -> list[Frame]:
+        """The node entered NMT OPERATIONAL; return frames to send (no state change)."""
+        return []
+
+    def event_enabled(self, index: int, sub: int) -> bool:
+        """False suppresses change-triggered TPDO sending for this object."""
+        return True
+
     def inject(self, kind: str, now: float | None = None, **params: Any) -> list[Frame]:
         raise ValueError(self._unknown(kind))
 

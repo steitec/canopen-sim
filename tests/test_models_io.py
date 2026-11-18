@@ -136,3 +136,72 @@ def test_io_fault_survives_reset_communication():
     assert od.get(0x1001, 0) & 0x81 == 0x81
     assert codes(m.clear("wire_break", now=3.0)) == [0]
     assert node.emcy.active() == []
+
+
+def build_pdo(model):
+    from canopen_sim.comm_objects import PdoSpec, add_pdo_objects
+    od = ObjectDictionary()
+    add_communication_objects(
+        od, device_type=0x00020191, vendor_id=0, product_code=1, revision=2,
+        serial=3, device_name="IO", heartbeat_ms=0)
+    for v in model.objects():
+        od.add(v)
+    add_pdo_objects(od, 1, tpdos=[
+        PdoSpec(0, [(0x6000, 1, 8)], 255),
+        PdoSpec(1, [(0x6401, 1, 16)], 255)], rpdos=[])
+    node = Node(1, od, "io", model=model)
+    node.boot(0.0)
+    return od, node
+
+
+def start(node, now=0.0):
+    from canopen_sim import frames
+    return node.handle(frames.Frame(frames.NMT, bytes([1, 1])), now)
+
+
+def test_analog_interrupt_object():
+    od, _ = build(IoModel())
+    var = od.entry(0x6423, 0)
+    assert var.access == "rw" and var.pdo_mappable and var.dtype.name == "BOOLEAN"
+    assert od.get(0x6423, 0) is False or od.get(0x6423, 0) == 0
+    with pytest.raises(Exception):
+        build(IoModel(analog_inputs=0))[0].entry(0x6423, 0)
+
+
+def test_analog_changes_gated_by_interrupt_enable():
+    m = IoModel()
+    od, node = build_pdo(m)
+    start(node, 0.0)
+    node.poll(0.1)  # initial event TPDOs already sent on entering OPERATIONAL
+    od.set(0x6411, 1, 500)
+    m.tick(0.1, 1.0)
+    assert [f.cob_id for f in node.poll(1.0)] == []  # 0x6423 FALSE: no TPDO2
+    od.set(0x6200, 1, 0x01)  # digital input change still goes out
+    m.tick(0.1, 1.1)
+    assert [f.cob_id for f in node.poll(1.1)] == [0x181]
+    od.sdo_write(0x6423, 0, b"\x01")
+    od.set(0x6411, 1, 600)
+    m.tick(0.1, 2.0)
+    out = node.poll(2.0)
+    assert [f.cob_id for f in out] == [0x281] and out[0].data == struct.pack("<h", 600)
+
+
+def test_warning_on_operational_with_interrupt_disabled():
+    m = IoModel()
+    od, node = build_pdo(m)
+    out = start(node, 0.0)
+    emcys = [f for f in out if f.cob_id == 0x81]
+    assert codes(emcys) == [0x0080] and emcys[0].data[2] == 0x01
+    assert node.state.name == "OPERATIONAL"
+    assert od.get(0x1001, 0) == 0x01
+    # set TRUE: warning cleared by EMCY 0x0000
+    od.sdo_write(0x6423, 0, b"\x01")
+    cleared = [f for f in m.tick(0.1, 1.0) if f.cob_id == 0x81]
+    assert codes(cleared) == [0x0000] and od.get(0x1001, 0) == 0
+
+
+def test_no_warning_when_interrupt_enabled():
+    m = IoModel()
+    od, node = build_pdo(m)
+    od.sdo_write(0x6423, 0, b"\x01")
+    assert [f for f in start(node, 0.0) if f.cob_id == 0x81] == []

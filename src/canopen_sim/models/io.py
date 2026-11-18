@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..emcy import CURRENT, MANUFACTURER, VOLTAGE
+from ..emcy import CURRENT, GENERIC, MANUFACTURER, VOLTAGE
 from ..frames import Frame
 from ..od import DataType, Variable
 from ..signals import Signal
@@ -15,6 +15,7 @@ I16_MIN = -32768
 WIRE_BREAK_CODE = 0xFF01  # no CiA 401 code for a broken wire: manufacturer-specific
 SHORT_CIRCUIT_CODE = 0x2320
 OVER_RANGE_CODE = 0x3110
+ANALOG_DISABLED_CODE = 0x0080  # warning: operational with 0x6423 FALSE
 
 
 def _clip(value: float) -> int:
@@ -35,6 +36,7 @@ class IoModel(Model):
         #: keys "di<n>" / "ai<n>" (1-based channel) drive that input
         self.signals = dict(signals or {})
         self._last_now = 0.0
+        self._warning = False  # EMCY 0x0080 sent and not yet cleared
         # (kind, "digital"|"analog", channel) -> EMCY code, kept in _active by name
         self._faults: dict[str, tuple[str, str, int]] = {}
 
@@ -65,6 +67,9 @@ class IoModel(Model):
               self.n_ai, True)
         array(0x6411, "Write analog output 16-bit", DataType.INTEGER16, "rw",
               self.n_ao, True)
+        if self.n_ai:
+            out.append(Variable(0x6423, 0, "Analog input global interrupt enable",
+                                DataType.BOOLEAN, "rw", False, pdo_mappable=True))
         return out
 
     # -- behaviour --------------------------------------------------------
@@ -72,7 +77,29 @@ class IoModel(Model):
     def tick(self, dt: float, now: float) -> list[Frame]:
         self._last_now = now
         self._update(now)
+        if self._warning and self._interrupts_enabled():
+            self._warning = False  # enabling the interrupts clears the warning
+            assert self.emcy is not None, "model not bound"
+            return self.emcy.clear(ANALOG_DISABLED_CODE, now=now)
         return []
+
+    def _interrupts_enabled(self) -> bool:
+        assert self.od is not None, "model not bound"
+        return not self.n_ai or bool(self.od.get(0x6423, 0))
+
+    def event_enabled(self, index: int, sub: int) -> bool:
+        return index != 0x6401 or self._interrupts_enabled()
+
+    def on_operational(self, now: float) -> list[Frame]:
+        if self._interrupts_enabled():
+            return []
+        assert self.emcy is not None, "model not bound"
+        self._warning = True
+        return self.emcy.raise_error(ANALOG_DISABLED_CODE, GENERIC, now=now)
+
+    def on_reset(self, now: float | None) -> list[Frame]:
+        self._warning = False  # the reset wiped the node's EMCY state
+        return super().on_reset(now)
 
     def _stuck(self, kind: str, domain: str, channel: int) -> bool:
         return any(f[0] == kind and f[1] == domain and f[2] == channel

@@ -173,7 +173,10 @@ class Node:
             was = self.state
             self.state = NmtState.OPERATIONAL
             if was != NmtState.OPERATIONAL:
-                return self.pdo.on_operational(now)
+                out = self.pdo.on_operational(now)
+                if self.model is not None:
+                    out = out + self.model.on_operational(now)
+                return out
         elif cmd == NMT_STOP:
             self.state = NmtState.STOPPED
             self.sdo.reset()

@@ -5,7 +5,7 @@ description: >
   position and homing (methods 35/37), in increments and increments/s.
 identity:
   device_type: 0x00020192   # profile 402 drive, servo (check in Task 15)
-  vendor_id: 0x00000000     # simulator default (check in Task 15)
+  vendor_id: 0x00000000     # 0 = no assigned CANopen vendor ID (CiA 301 treats 0 as invalid); override if needed
   product_code: 0x00000402
   revision: 0x00010000
   serial: 0x00000001

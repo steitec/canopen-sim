@@ -72,6 +72,9 @@ class PdoEngine:
     # -- TPDO -------------------------------------------------------------
 
     def value_changed(self, index: int, sub: int) -> None:
+        model = self.node.model
+        if model is not None and not model.event_enabled(index, sub):
+            return
         for t in self.tpdos:
             if self.od.get(t.comm, 2) in (0, *_EVENT_TYPES) and any(
                     e[:2] == (index, sub) for e in self._entries(t.mapping)):
