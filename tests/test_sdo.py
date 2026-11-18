@@ -260,3 +260,14 @@ def test_completed_upload_returns_to_idle():
     assert s.state == "idle"
     (r,) = s.handle(bytes([0x60]) + bytes(7), 0.3)
     assert abort_of(r) == BAD_COMMAND
+
+
+def test_expedited_download_without_size_bit_small_types():
+    od, s = make()
+    od.add(Variable(0x2003, 0, "i8", DataType.INTEGER8, "rw", 0))
+    (r,) = s.handle(bytes([0x22, 0x00, 0x20, 0x00, 0x34, 0x12, 0, 0]), 0.0)
+    assert r[0] == 0x60
+    assert od.get(0x2000, 0) == 0x1234
+    (r,) = s.handle(bytes([0x22, 0x03, 0x20, 0x00, 0xFE, 0, 0, 0]), 0.0)
+    assert r[0] == 0x60
+    assert od.get(0x2003, 0) == -2

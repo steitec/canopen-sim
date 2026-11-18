@@ -158,8 +158,15 @@ class SdoServer:
         cmd = data[0]
         ack = bytes([0x60, data[1], data[2], data[3], 0, 0, 0, 0])
         if cmd & 0x02:  # expedited
-            n = (cmd >> 2) & 3 if cmd & 0x01 else 0
-            self.od.sdo_write(self.index, self.sub, data[4:8 - n])
+            if cmd & 0x01:
+                payload = data[4:8 - ((cmd >> 2) & 3)]
+            else:  # no size indicator: a fixed-size type tells the length itself
+                var = self.od.entry(self.index, self.sub)
+                if var.dtype in (DataType.VISIBLE_STRING, DataType.OCTET_STRING):
+                    payload = data[4:8]
+                else:
+                    payload = data[4:4 + len(encode(var.dtype, var.value))]
+            self.od.sdo_write(self.index, self.sub, payload)
             self.reset()
             return ack
         var = self.od.entry(self.index, self.sub)
