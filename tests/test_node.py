@@ -28,8 +28,10 @@ def nmt(cmd, target=ID):
     return Frame(frames.NMT, bytes([cmd, target]))
 
 
-def sdo_write(index, sub, value):
-    data = bytes([0x23, index & 0xFF, index >> 8, sub]) + struct.pack("<I", value)
+def sdo_write(index, sub, value, size=4):
+    cmd = 0x23 | ((4 - size) << 2)
+    data = bytes([cmd, index & 0xFF, index >> 8, sub]) + struct.pack("<I", value)
+    data = data[:4 + size]
     return Frame(frames.sdo_rx(ID), data)
 
 
@@ -64,14 +66,14 @@ def test_heartbeat_period_follows_1017():
     od, node = make()
     node.boot(0.0)
     assert node.poll(5.0) == []
-    node.handle(sdo_write(0x1017, 0, 100), 10.0)
+    node.handle(sdo_write(0x1017, 0, 100, 2), 10.0)
     assert node.poll(10.05) == []
     assert node.poll(10.1) == [Frame(0x705, b"\x7f")]
     assert node.poll(10.15) == []
     assert node.poll(10.2) == [Frame(0x705, b"\x7f")]
     node.handle(nmt(0x01), 10.21)
     assert node.poll(10.3) == [Frame(0x705, b"\x05")]
-    node.handle(sdo_write(0x1017, 0, 0), 10.31)
+    node.handle(sdo_write(0x1017, 0, 0, 2), 10.31)
     assert node.poll(20.0) == []
 
 
