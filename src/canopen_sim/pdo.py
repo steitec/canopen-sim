@@ -93,6 +93,8 @@ class PdoEngine:
         t.pending = False
         t.last_tx = now
         frame = self._build(t)
+        if frame is not None:
+            frame = self.node._nf.tpdo(t.comm - 0x1800 + 1, frame)
         return [frame] if frame else []
 
     def on_operational(self, now: float) -> list[Frame]:

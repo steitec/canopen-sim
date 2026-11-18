@@ -11,7 +11,9 @@ from enum import IntEnum
 from . import frames
 from .comm_objects import set_node_id
 from .emcy import Emcy
+from .faults import NodeFaults
 from .frames import Frame
+from .models.base import Model
 from .od import CANNOT_STORE, ObjectDictionary, SdoAbort
 from .pdo import PdoEngine
 from .sdo import SdoServer
@@ -35,7 +37,8 @@ def _snapshot(od: ObjectDictionary) -> dict[tuple[int, int], object]:
 
 
 class Node:
-    def __init__(self, node_id: int, od: ObjectDictionary, name: str) -> None:
+    def __init__(self, node_id: int, od: ObjectDictionary, name: str,
+                 model: Model | None = None) -> None:
         self.node_id = node_id
         self.od = od
         self.name = name
@@ -48,6 +51,10 @@ class Node:
         self._defaults = _snapshot(od)
         self.pdo = PdoEngine(self)
         self.emcy = Emcy(self)
+        self.model = model
+        if model is not None:
+            model.bind(od, self.emcy)
+        self._nf = NodeFaults(self)
         self._stored: dict[tuple[int, int], object] | None = None
         self._hb_next: float | None = None
         self._hb_restart = False
@@ -65,13 +72,24 @@ class Node:
         self.sdo.reset()
         self.state = NmtState.PRE_OPERATIONAL
         self._restart_heartbeat(now)
-        return [Frame(frames.heartbeat(self.node_id), bytes([NmtState.BOOTUP]))]
+        self._nf.on_reset()
+        if self._nf.muted():
+            return []
+        bootup = Frame(frames.heartbeat(self.node_id), bytes([NmtState.BOOTUP]))
+        return [bootup, bootup] if self._nf.fs.take("double_bootup") is not None else [bootup]
 
     def handle(self, frame: Frame, now: float) -> list[Frame]:
+        muted = self._nf.muted()
+        if muted and frame.cob_id == frames.sdo_rx(self.node_id):
+            return []  # requests are dropped without an answer
+        out = self._dispatch(frame, now)
+        return [] if muted else out
+
+    def _dispatch(self, frame: Frame, now: float) -> list[Frame]:
         if frame.cob_id == frames.NMT:
             return self._handle_nmt(frame.data, now)
         if frame.cob_id == frames.sdo_rx(self.node_id) and self._sdo_active():
-            out = [Frame(frames.sdo_tx(self.node_id), d) for d in self.sdo.handle(frame.data, now)]
+            out = [Frame(frames.sdo_tx(self.node_id), d) for d in self._nf.sdo_request(frame.data, now)]
             if self._hb_restart:
                 self._restart_heartbeat(now)
             return out
@@ -84,12 +102,38 @@ class Node:
     def emergency(self, code: int, register_bits: int, data: bytes = b"",
                   now: float | None = None) -> list[Frame]:
         """Raise an EMCY error (see :class:`canopen_sim.emcy.Emcy`)."""
-        return self.emcy.raise_error(code, register_bits, data, now)
+        out = self.emcy.raise_error(code, register_bits, data, now)
+        return [] if self._nf.muted() else out
+
+    def tick(self, dt: float, now: float) -> list[Frame]:
+        """Advance the behaviour model; returns its frames (none without a model)."""
+        if self.model is None:
+            return []
+        out = self.model.tick(dt, now)
+        return [] if self._nf.muted() else out
+
+    def inject(self, kind: str, now: float | None = None, **params) -> list[Frame]:
+        """Inject a fault (catalogue, model or ``emcy``); returns frames to send."""
+        out = self._nf.inject(kind, now, params)
+        return [] if self._nf.muted() else out
+
+    def clear(self, kind: str | None = None, now: float | None = None) -> list[Frame]:
+        """Clear one fault by name, or all faults when ``kind`` is None."""
+        out = self._nf.clear(kind, now)
+        return [] if self._nf.muted() else out
+
+    def faults(self) -> list[str]:
+        return self._nf.active()
+
+    def _reset(self, now: float) -> list[Frame]:
+        self._restore(lambda key: True)
+        self.emcy.reset()
+        return self.boot(now)
 
     def poll(self, now: float) -> list[Frame]:
-        out: list[Frame] = []
-        if self._sdo_active():
-            out += [Frame(frames.sdo_tx(self.node_id), d) for d in self.sdo.poll(now)]
+        answers = self.sdo.poll(now) if self._sdo_active() else []
+        out: list[Frame] = [Frame(frames.sdo_tx(self.node_id), d)
+                            for d in self._nf.defer(answers, now)]
         period = self.od.get(0x1017, 0) / 1000.0
         if period <= 0:
             self._hb_next = None  # 0x1017 disabled (also via od.set)
@@ -97,13 +141,14 @@ class Node:
             if self.state != NmtState.BOOTUP:  # enabled via od.set: start now
                 self._hb_next = now + period
         elif now >= self._hb_next - 1e-9:
-            out.append(Frame(frames.heartbeat(self.node_id), bytes([self.state])))
+            if not self._nf.suppress_heartbeat():
+                out.append(Frame(frames.heartbeat(self.node_id), bytes([self.state])))
             self._hb_next += period
             if self._hb_next <= now:  # fell far behind: do not burst
                 self._hb_next = now + period
         out += self.emcy.poll(now)
         out += self.pdo.poll(now)
-        return out
+        return [] if self._nf.muted() else out
 
     # -- NMT --------------------------------------------------------------
 
@@ -125,9 +170,7 @@ class Node:
         elif cmd == NMT_PRE_OP:
             self.state = NmtState.PRE_OPERATIONAL
         elif cmd == NMT_RESET_NODE:
-            self._restore(lambda key: True)
-            self.emcy.reset()
-            return self.boot(now)
+            return self._reset(now)
         elif cmd == NMT_RESET_COMM:
             self._restore(lambda key: 0x1000 <= key[0] <= 0x1FFF)
             self.emcy.reset()
