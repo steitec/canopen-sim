@@ -328,3 +328,12 @@ def test_supported_drive_modes_object():
         bits = OperationMode.SUPPORTED[mode]
         assert r.od.get(0x6502, 0) & bits == bits
     assert not r.od.get(0x6502, 0) & OperationMode.SUPPORTED["PROFILED TORQUE"]
+
+
+def test_switch_on_and_enable_from_ready():
+    r = Rig()
+    r.cw(0x06)
+    r.tick()
+    r.cw(0x0F)
+    r.tick()
+    assert r.sw() & 0x6F == 0x27

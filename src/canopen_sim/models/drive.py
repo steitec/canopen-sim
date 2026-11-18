@@ -164,6 +164,9 @@ class DriveModel(Model):
             if s in (READY, OPERATION_ENABLED):
                 self._set_state(SWITCHED_ON)
         elif cw & 0x0F == 0x0F:  # enable operation
+            if s == READY:  # switch on + enable operation in one step
+                self._set_state(SWITCHED_ON)
+                s = SWITCHED_ON
             if s == SWITCHED_ON:
                 self._set_state(OPERATION_ENABLED)
 

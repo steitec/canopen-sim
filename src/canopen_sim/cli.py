@@ -162,8 +162,10 @@ def _cmd_serve(args, stop: threading.Event | None = None) -> int:
     try:
         bench = (Bench.from_yaml(args.bench) if args.bench
                  else Bench.single(args.profile, node_id=args.id))
-        bench.start(interface=args.interface, channel=args.channel,
-                    control_port=args.control_port)
+        port = args.control_port
+        if port is None:
+            port = bench.control_port if bench.control_port is not None else CONTROL_PORT
+        bench.start(interface=args.interface, channel=args.channel, control_port=port)
     except BenchError as error:
         _error(error)
         return 2
@@ -266,9 +268,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--interface", choices=["socketcan", "virtual"],
                    help="python-can interface (default: the bench's own, else virtual)")
     p.add_argument("--channel", help="bus channel (default vcan0 for socketcan)")
-    p.add_argument("--control-port", type=int, default=CONTROL_PORT,
-                   help=f"control channel port on 127.0.0.1 (default {CONTROL_PORT}; "
-                        "0 = any free port)")
+    p.add_argument("--control-port", type=int, default=None,
+                   help=f"control channel port on 127.0.0.1 (default: the bench's "
+                        f"own, else {CONTROL_PORT}; 0 = any free port)")
     p.set_defaults(func=_cmd_serve)
 
     p = sub.add_parser("inject", help="inject a fault via the control channel")

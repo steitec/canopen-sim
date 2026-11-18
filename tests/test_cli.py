@@ -156,3 +156,37 @@ def test_serve_on_virtual_bus_prints_a_hint_to_stderr(capsys):
     finally:
         stop.set()
         thread.join(5)
+
+
+def _free_port():
+    import socket
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def test_serve_bench_honours_yaml_control_port(tmp_path, capsys):
+    port = _free_port()
+    path = tmp_path / "bench.yaml"
+    path.write_text(
+        "bus: {interface: virtual}\n"
+        "nodes:\n  - {profile: generic-drive, id: 2, name: axis}\n"
+        f"control: {{port: {port}}}\n", encoding="utf-8")
+    stop = threading.Event()
+    result = []
+    thread = threading.Thread(target=lambda: result.append(
+        main(["serve", "--bench", str(path)], stop=stop)))
+    thread.start()
+    try:
+        out = []
+
+        def ready():
+            out.append(capsys.readouterr().out)
+            return "control 127.0.0.1:" in "".join(out)
+
+        wait_until(ready, timeout=5.0)
+        assert f"control 127.0.0.1:{port}" in "".join(out)
+    finally:
+        stop.set()
+        thread.join(5)
+    assert result == [0]
