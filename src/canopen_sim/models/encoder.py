@@ -11,6 +11,7 @@ from .base import Model
 SINGLE_TURN_FAILURE = 0x5050
 MULTI_TURN_FAILURE = 0x5051
 _WRAP32 = 1 << 32
+MULTITURN_REVOLUTIONS = 65536  # reported in 0x6502; the counter itself wraps at 2**32
 
 
 class EncoderModel(Model):
@@ -34,6 +35,12 @@ class EncoderModel(Model):
             Variable(0x6003, 0, "Preset value", DataType.UNSIGNED32, "rw", 0),
             Variable(0x6004, 0, "Position value", DataType.UNSIGNED32, "ro", 0,
                      pdo_mappable=True),
+            Variable(0x6500, 0, "Operating status", DataType.UNSIGNED16, "ro", 0),
+            Variable(0x6501, 0, "Measuring step (single-turn resolution)",
+                     DataType.UNSIGNED32, "const", self.resolution),
+            Variable(0x6502, 0, "Number of distinguishable revolutions",
+                     DataType.UNSIGNED32, "const",
+                     MULTITURN_REVOLUTIONS if self.multiturn else 1),
             Variable(0x6030, 0, "Highest sub-index", DataType.UNSIGNED8, "const", 1),
             Variable(0x6030, 1, "Speed value", DataType.INTEGER16, "ro", 0,
                      pdo_mappable=True),
@@ -60,7 +67,9 @@ class EncoderModel(Model):
         assert self.od is not None
         self._pos %= self._span()
         self.od.set(0x6004, 0, int(self._pos))
-        self.od.set(0x6030, 1, max(-32768, min(32767, round(self._sign() * self.speed_rpm))))
+        steps_per_s = round(self.speed_rpm / 60.0 * self._res() * self._sign())
+        self.od.set(0x6030, 1, max(-32768, min(32767, steps_per_s)))
+        self.od.set(0x6500, 0, self.od.get(0x6000, 0) & 1)  # code sequence bit
 
     def _on_preset(self, value: int) -> None:
         self._pos = float(value % self._span())

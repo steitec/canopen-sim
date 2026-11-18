@@ -5,7 +5,7 @@ import pytest
 from canopen_sim.comm_objects import add_communication_objects
 from canopen_sim.models.encoder import EncoderModel
 from canopen_sim.node import Node
-from canopen_sim.od import ObjectDictionary
+from canopen_sim.od import DataType, ObjectDictionary
 
 
 def build(model):
@@ -35,7 +35,7 @@ def test_encoder_position_from_speed():
     od, _ = build(m)
     m.tick(0.5, 0.5)
     assert od.get(0x6004, 0) == 2048
-    assert od.get(0x6030, 1) == 60
+    assert od.get(0x6030, 1) == 4096  # steps per second, not rpm
     m.tick(0.5, 1.0)
     assert od.get(0x6004, 0) == 4096  # multiturn: no wrap at one turn
 
@@ -60,7 +60,7 @@ def test_encoder_direction_bit():
     od.sdo_write(0x6000, 0, struct.pack("<H", 1))
     m.tick(0.25, 0.25)
     assert od.get(0x6004, 0) == 750
-    assert od.get(0x6030, 1) == -60
+    assert od.get(0x6030, 1) == -1000
 
 
 def test_encoder_multiturn_wraps_at_2_32():
@@ -123,3 +123,33 @@ def test_encoder_unknown_fault():
     with pytest.raises(ValueError):
         m.inject("position_jump", delta="x")
     assert m.variables()["speed_rpm"] == 0.0
+
+
+def test_speed_in_steps_per_second_and_clamped():
+    m = EncoderModel(resolution=1000, speed_rpm=30.0)
+    od, _ = build(m)
+    m.tick(0.1, 0.1)
+    assert od.get(0x6030, 1) == 500
+    m.speed_rpm = 6000.0  # 100000 steps/s: clamped to INTEGER16
+    m.tick(0.1, 0.2)
+    assert od.get(0x6030, 1) == 32767
+    od.sdo_write(0x6000, 0, struct.pack("<H", 1))
+    m.tick(0.1, 0.3)
+    assert od.get(0x6030, 1) == -32768
+
+
+def test_class_c1_objects():
+    for turns, expected in ((True, 65536), (False, 1)):
+        m = EncoderModel(resolution=1000, multiturn=turns)
+        od, _ = build(m)
+        for index, dtype, access in ((0x6500, DataType.UNSIGNED16, "ro"),
+                                     (0x6501, DataType.UNSIGNED32, "const"),
+                                     (0x6502, DataType.UNSIGNED32, "const")):
+            var = od.entry(index, 0)
+            assert var.dtype == dtype and var.access == access
+        assert od.get(0x6501, 0) == 1000
+        assert od.get(0x6502, 0) == expected
+        assert od.get(0x6500, 0) == 0
+        od.sdo_write(0x6000, 0, struct.pack("<H", 1))
+        m.tick(0.1, 0.1)
+        assert od.get(0x6500, 0) == 1

@@ -190,3 +190,15 @@ def test_pdo_enabled_must_be_a_bool(value):
         build_node({"profile": "generic-drive",
                     "tpdos": [{"number": 0, "mapping": ["0x6041:0/16"],
                                "enabled": value}]}, node_id=1)
+
+
+def test_encoder_device_type_follows_multiturn():
+    spec = load_profile("generic-encoder")
+    spec = {**spec, "identity": {k: v for k, v in spec["identity"].items()
+                                 if k != "device_type"}}
+    assert build_node(spec, node_id=3).od.get(0x1000, 0) == 0x00020196
+    single = {**spec, "model": {**spec["model"], "multiturn": False}}
+    assert build_node(single, node_id=3).od.get(0x1000, 0) == 0x00010196
+    explicit = {**single, "identity": {**spec["identity"], "device_type": 0x00020196}}
+    assert build_node(explicit, node_id=3).od.get(0x1000, 0) == 0x00020196
+    assert load_profile("generic-encoder")["identity"].get("device_type") is None

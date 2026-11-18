@@ -317,6 +317,7 @@ def build_node(source: str | Path | dict, *, node_id: int, name: str | None = No
     unknown = set(ident) - _IDENTITY_KEYS
     if unknown:
         raise ProfileError(f"identity: unknown key(s) {', '.join(sorted(unknown))}")
+    model = _build_model(spec.get("model"))
     numbers = {}
     for key, default in (("device_type", 0), ("vendor_id", 0), ("product_code", 0),
                          ("revision", 0), ("serial", 0)):
@@ -329,13 +330,14 @@ def build_node(source: str | Path | dict, *, node_id: int, name: str | None = No
     if not 0 <= heartbeat <= 0xFFFF:
         raise ProfileError("heartbeat_ms must be 0..65535")
 
+    if "device_type" not in ident and isinstance(model, EncoderModel):
+        numbers["device_type"] = 0x00020196 if model.multiturn else 0x00010196
     od = ObjectDictionary()
     add_communication_objects(od, device_name=device_name, heartbeat_ms=heartbeat,
                               **numbers)
     tpdos = _pdo_specs(spec.get("tpdos"), "TPDO")
     rpdos = _pdo_specs(spec.get("rpdos"), "RPDO")
     add_pdo_objects(od, node_id, tpdos=tpdos, rpdos=rpdos)
-    model = _build_model(spec.get("model"))
     if model is not None:
         for var in model.objects():
             od.add(var)
