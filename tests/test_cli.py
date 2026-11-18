@@ -1,5 +1,6 @@
 """Command line: list, map, export-eds, control commands and serve."""
 import re
+import sys
 import threading
 
 import pytest
@@ -124,13 +125,17 @@ def test_malformed_inject_params_exit_2(params, capsys):
     assert capsys.readouterr().err.strip()
 
 
-def test_broken_pipe_is_silent():
+def test_map_runs_as_module():
     import subprocess
-    import sys
     result = subprocess.run(
         [sys.executable, "-m", "canopen_sim", "map", "generic-drive"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     assert result.returncode == 0
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the `| head` pipeline needs a POSIX shell")
+def test_broken_pipe_is_silent():
+    import subprocess
     shell = subprocess.run(
         f"{sys.executable} -m canopen_sim map generic-drive | head -1 >/dev/null",
         shell=True, stderr=subprocess.PIPE)

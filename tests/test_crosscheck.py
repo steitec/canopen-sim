@@ -9,7 +9,7 @@ import pytest
 
 from canopen_sim.bench import Bench
 
-from .helpers import wait_until
+from .helpers import commission_fault_and_recover, wait_until
 
 BLOB = 0x2100
 BLOB_SIZE = 300
@@ -77,23 +77,4 @@ def test_canopen_emcy(drive):
 
 def test_drive_commissioning_with_basenode402(drive):
     """Success criterion: commission, run, fault, acknowledge, run again."""
-    node = drive.remote_node("axis", cls=canopen.BaseNode402)
-    node.nmt.state = "PRE-OPERATIONAL"             # the client checks its NMT view first
-    node.setup_402_state_machine()
-    node.nmt.state = "OPERATIONAL"
-    wait_until(lambda: node.state == "SWITCH ON DISABLED")
-    node.state = "OPERATION ENABLED"
-    node.op_mode = "PROFILED VELOCITY"
-    assert node.op_mode == "PROFILED VELOCITY"
-    node.rpdo_pointers[0x60FF].raw = 500           # target velocity, sent with RPDO1
-    node.rpdo_pointers[0x60FF].pdo_parent.transmit()
-    wait_until(lambda: node.tpdo_values[0x606C] >= 400)
-
-    drive.inject("over_temperature")
-    wait_until(lambda: node.state == "FAULT")
-    assert node.is_faulted()
-    drive.clear()
-    node.state = "SWITCH ON DISABLED"              # fault reset (controlword bit 7)
-    node.state = "OPERATION ENABLED"
-    assert node.state == "OPERATION ENABLED"
-    assert drive.variables("axis")["state"] == "operation_enabled"
+    commission_fault_and_recover(drive)

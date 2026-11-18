@@ -51,6 +51,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["error"]
+markers = ["vcan: needs a vcan0 interface (Linux, set up by the CI vcan job)"]
 
 [tool.setuptools.package-data]
 canopen_sim = ["profiles/*.yaml"]

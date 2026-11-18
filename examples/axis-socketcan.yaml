@@ -1,0 +1,7 @@
+# The same drive as axis.yaml, on SocketCAN vcan0 (Linux). Used by the CI vcan job:
+#   pytest -v examples/test_example.py --canopen-bench examples/axis-socketcan.yaml
+# Set vcan0 up first (see the README quick start). Do not run `canopen-sim serve`
+# with the same node ID on vcan0 at the same time: the pytest plugin starts its own bench.
+bus: {interface: socketcan, channel: vcan0}
+nodes:
+  - {profile: generic-drive, id: 3, name: axis, heartbeat_ms: 500}
