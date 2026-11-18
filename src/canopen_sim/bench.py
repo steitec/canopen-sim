@@ -79,9 +79,12 @@ class Bench:
         self.interface = interface
         self.channel = channel
         self.bitrate = bitrate
-        #: control port from the YAML or start(); the control server is wired in by
-        #: the control-channel task (Task 11) — until then it is only stored.
+        #: control port from the YAML or start(); 0 = ephemeral, the real port is
+        #: recorded here once the control server runs. None = no control channel.
         self.control_port = control_port
+        #: the control channel has no authentication: keep it on loopback.
+        self.control_host = "127.0.0.1"
+        self._control: Any = None
         self._locks = {name: threading.Lock() for name in self.nodes}
         self._bus: can.BusABC | None = None
         self._stop = threading.Event()
@@ -165,8 +168,9 @@ class Bench:
         ``interface`` defaults to the bench's own (from the YAML, else
         ``virtual``). ``channel`` defaults to the YAML channel when the
         interface is the YAML one, else ``vcan0`` for socketcan and a unique
-        ``canopen-sim-<uuid>`` for virtual. ``control_port`` is stored; the
-        control server is started by the control-channel task (Task 11)."""
+        ``canopen-sim-<uuid>`` for virtual. ``control_port`` (0 = any free
+        port) starts the JSON control channel on loopback; the port in use is
+        then in ``bench.control_port``."""
         if self.running:
             raise BenchError("bench already started")
         configured = self.interface
@@ -196,12 +200,25 @@ class Bench:
         now = time.monotonic()
         for name, node in self.nodes.items():
             self._run(name, lambda n=node: n.boot(now))
+        if self.control_port is not None:
+            from .control import ControlServer
+            control = ControlServer(self, self.control_host, self.control_port)
+            try:
+                self.control_port = control.start()
+            except OSError as error:
+                self.stop()
+                raise BenchError(f"cannot open control port {self.control_port}: "
+                                 f"{error}") from None
+            self._control = control
 
     def stop(self) -> None:
         """Stop the threads and shut the bus down; safe to call twice."""
         bus = self._bus
         if bus is None:
             return
+        control, self._control = self._control, None
+        if control is not None:
+            control.stop()
         self._stop.set()
         for thread in self._threads:
             if thread is not threading.current_thread():
@@ -286,8 +303,7 @@ class Bench:
         if name_or_id is None:
             if len(self.nodes) == 1:
                 return next(iter(self.nodes.values()))
-            raise BenchError(f"this bench has {len(self.nodes)} nodes; name one of "
-                             f"{', '.join(self.nodes)}")
+            raise BenchError(f"node required: {', '.join(self.nodes)}")
         if isinstance(name_or_id, str) and name_or_id in self.nodes:
             return self.nodes[name_or_id]
         wanted = name_or_id
@@ -328,6 +344,18 @@ class Bench:
             values = dict(target.model.variables()) if target.model is not None else {}
             values["nmt_state"] = target.state.name.lower()
         return values
+
+    def status(self) -> dict[str, dict[str, Any]]:
+        """Per node: id, profile, NMT state, active faults and EMCY codes (hex),
+        read under the node lock."""
+        out: dict[str, dict[str, Any]] = {}
+        for name, node in self.nodes.items():
+            with self._locks[name]:
+                out[name] = {"id": node.node_id, "profile": self.profiles.get(name),
+                             "nmt_state": node.state.name.lower(),
+                             "faults": node.faults(),
+                             "errors": [f"0x{code:04X}" for code in node.emcy.active()]}
+        return out
 
     def describe(self) -> str:
         where = f"{self.interface} {self.channel or '(channel on start)'}"
