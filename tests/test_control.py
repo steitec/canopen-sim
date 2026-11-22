@@ -121,3 +121,12 @@ def test_unserialisable_object_keeps_connection(started):
         stream.write(b'{"list": true}\n')
         stream.flush()
         assert json.loads(stream.readline())["ok"] is True
+
+
+def test_list_with_node_returns_only_that_node(started):
+    bench = started(("axis", 3), ("lift", 4))
+    assert list(_call(bench, {"list": True})["nodes"]) == ["axis", "lift"]
+    assert list(_call(bench, {"list": True, "node": "lift"})["nodes"]) == ["lift"]
+    assert list(_call(bench, {"list": True, "node": 3})["nodes"]) == ["axis"]
+    bad = _call(bench, {"list": True, "node": "nope"})
+    assert bad["ok"] is False and "no node 'nope'" in bad["error"]

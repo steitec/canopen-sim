@@ -8,6 +8,7 @@ when the bench has exactly one node::
     {"get": true}                   (or ["nmt_state", ...])  -> {"ok": true, "values": {...}}
     {"list": true} -> {"ok": true, "nodes": {"axis": {"id": 3, "profile": "generic-drive",
                        "nmt_state": "operational", "faults": [...], "errors": ["0x4310"]}}}
+                      (with "node": only that node; without: all nodes)
 
 Anything invalid gets ``{"ok": false, "error": "..."}``; the connection stays open. The
 channel has no authentication, so bind it to loopback (the default).
@@ -148,7 +149,11 @@ class ControlServer:
     def _handle(self, request: dict) -> dict[str, Any]:
         bench, node = self.bench, request.get("node")
         if request.get("list"):
-            return {"ok": True, "nodes": bench.status()}
+            nodes = bench.status()
+            if node is not None:
+                name = bench.find(node).name
+                nodes = {name: nodes[name]}
+            return {"ok": True, "nodes": nodes}
         if request.get("clear"):
             kind = request["clear"]
             if kind is True:

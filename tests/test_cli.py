@@ -1,4 +1,5 @@
 """Command line: list, map, export-eds, control commands and serve."""
+import json
 import re
 import sys
 import threading
@@ -77,6 +78,24 @@ def test_error_answer_exit_1_on_stderr(bench, capsys):
 def test_state_json(bench, capsys):
     assert main(["state", "--json", "--control-port", str(bench.control_port)]) == 0
     assert '"nmt_state"' in capsys.readouterr().out
+
+
+def test_state_node_shows_only_that_node(capsys):
+    bench = Bench.from_dict({"nodes": [
+        {"profile": "generic-drive", "id": 3, "name": "axis"},
+        {"profile": "generic-io", "id": 5, "name": "io"}]})
+    bench.start(interface="virtual", control_port=0)
+    try:
+        port = ["--control-port", str(bench.control_port)]
+        assert main(["state", "--json", "--node", "axis", *port]) == 0
+        assert list(json.loads(capsys.readouterr().out)) == ["axis"]
+        assert main(["state", "--node", "5", *port]) == 0
+        rows = capsys.readouterr().out.splitlines()
+        assert len(rows) == 2 and rows[1].startswith("io ")
+        assert main(["state", "--node", "nope", *port]) == 1
+        assert "no node 'nope'" in capsys.readouterr().err
+    finally:
+        bench.stop()
 
 
 def test_unreachable_control_exit_3(capsys):
