@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `canopen-sim state --node NODE` (with or without `--json`) shows only that node; it
+  showed every node of the bench. The control channel's `list` request takes `node` the
+  same way, and an unknown node is an error.
+
 ## 0.1.0 — 2026-11-18
 
 First release.
